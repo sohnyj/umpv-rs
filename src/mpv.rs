@@ -14,20 +14,6 @@ use crate::pipe;
 
 const MPV_WINDOW_CLASS_NAME: [u16; 3] = [b'm' as u16, b'p' as u16, b'v' as u16];
 
-fn is_url(string: &str) -> bool {
-    string.contains("://")
-}
-
-pub fn resolve_file_path(arg: &str) -> String {
-    if is_url(arg) {
-        return arg.to_string();
-    }
-    match std::path::absolute(arg) {
-        Ok(path) => path.to_string_lossy().into_owned(),
-        Err(_) => arg.to_string(),
-    }
-}
-
 fn resolve_mpv_path() -> Option<PathBuf> {
     std::env::current_exe()
         .ok()

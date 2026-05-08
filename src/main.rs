@@ -55,10 +55,24 @@ fn parse_loadfile_mode(args: &[String]) -> Option<&str> {
     args.iter().find_map(|arg| arg.strip_prefix("--loadfile="))
 }
 
+fn is_url(string: &str) -> bool {
+    string.contains("://")
+}
+
+fn resolve_file_path(arg: &str) -> String {
+    if is_url(arg) {
+        return arg.to_string();
+    }
+    match std::path::absolute(arg) {
+        Ok(path) => path.to_string_lossy().into_owned(),
+        Err(_) => arg.to_string(),
+    }
+}
+
 fn collect_files(args: &[String]) -> Vec<String> {
     args.iter()
         .filter(|arg| !arg.starts_with("--"))
-        .map(|arg| mpv::resolve_file_path(arg))
+        .map(|arg| resolve_file_path(arg))
         .collect()
 }
 
