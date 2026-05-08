@@ -8,9 +8,9 @@ A single-instance mpv launcher for Windows, written in Rust. Based on the [umpv]
 
 ## Usage
 
-**Place umpv.exe in the same directory as mpv.exe**
+**Place umpv.exe in the same directory as mpv.exe.** umpv launches `mpv.exe` from its own directory, so PATH is not consulted.
 
-### 1. Register file associations with mpv ([mpv-register helper](https://mpv.io/manual/master/#options-register))
+### 1. Register file associations with mpv ([mpv's `--register`](https://mpv.io/manual/master/#options-register))
 
 ```bat
 .\mpv.com --register --video-exts=mp4,mkv --audio-exts= --image-exts= --archive-exts= --playlist-exts=
@@ -23,7 +23,7 @@ Specify the extensions you want. Leave a category empty (`=`) to skip it.
 
 ### 2. Add umpv to mpv's registered extensions
 
-Only processes extensions that were registered by the mpv-register helper (step 1). 
+Only processes extensions that were registered by mpv's `--register` (step 1).
 
 ```bat
 .\umpv.exe --register
@@ -31,9 +31,9 @@ Only processes extensions that were registered by the mpv-register helper (step 
 
 > [!NOTE]
 > umpv only supports per-user file associations (`HKEY_CURRENT_USER`). **Running as administrator is neither required nor supported, and umpv does not support system-wide associations.**
-> To set umpv as the default for each extension, go to Windows Settings > App > Default apps > mpv, and select umpv for the desired extensions.
+> To set umpv as the default for each extension, go to Windows Settings > Apps > Default apps > mpv, and select umpv for the desired extensions.
 
-Without arguments, registers with the default loadfile mode (`replace`). Optionally specify a different mode:
+`--loadfile=` is optional; if omitted, defaults to `replace`. Example:
 
 ```bat
 .\umpv.exe --register --loadfile=append+play
@@ -47,9 +47,9 @@ Without arguments, registers with the default loadfile mode (`replace`). Optiona
 
 Removes umpv file associations from the registry. Does not restore previous defaults.
 
-## Options
+## Loadfile modes
 
-The `--loadfile=<value>` option controls how files are added to the mpv playlist.
+The `--loadfile=<value>` option controls how files are added to the mpv playlist. The mode is specified at registration time and baked into the registered command line.
 
 | Value | Description |
 |-------|-------------|
@@ -81,11 +81,14 @@ See the [mpv documentation](https://mpv.io/manual/master/#command-interface-[%3C
 
 ### Requirements
 
-- [Rust](https://www.rust-lang.org/tools/install) (stable)
-- [cargo-xwin](https://github.com/rust-cross/cargo-xwin): cross-compiles to Windows MSVC target on Linux/macOS
-- `llvm-rc`: included in the LLVM package (`llvm` on apt, `llvm` on Homebrew)
+- [Rust](https://www.rust-lang.org/) with the `x86_64-pc-windows-msvc` target
+- [cargo-xwin](https://github.com/rust-cross/cargo-xwin)
+- `llvm-rc`: included in the [LLVM](https://llvm.org/) package (`llvm` on apt, `llvm` on Homebrew)
+
+### Setup
 
 ```bash
+rustup target add x86_64-pc-windows-msvc
 cargo install cargo-xwin
 ```
 
