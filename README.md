@@ -77,7 +77,7 @@ URLs (`scheme://...`) are passed through to mpv as-is without path resolution.
 
 See the [mpv documentation](https://mpv.io/manual/master/#command-interface-[%3Coptions%3E]]]) for the full list of options.
 
-## Building
+## Cross-compiling
 
 ### Requirements
 
