@@ -74,6 +74,7 @@ fn open(pipe_path_wide: &[u16]) -> HANDLE {
 fn connect(retry: bool) -> Result<HANDLE, u32> {
     let pipe_path_wide = encode_wide(PIPE_PATH);
     let max_attempts = if retry { RETRY_MAX_ATTEMPTS } else { 1 };
+    let mut last_error = ERROR_FILE_NOT_FOUND;
 
     for attempt in 0..max_attempts {
         if attempt > 0 {
@@ -86,13 +87,15 @@ fn connect(retry: bool) -> Result<HANDLE, u32> {
         }
 
         unsafe {
-            match GetLastError() {
+            last_error = GetLastError();
+            match last_error {
                 ERROR_PIPE_BUSY => {
                     if WaitNamedPipeW(pipe_path_wide.as_ptr(), PIPE_BUSY_TIMEOUT_MS) != FALSE {
                         let handle = open(&pipe_path_wide);
                         if handle != INVALID_HANDLE_VALUE {
                             return Ok(handle);
                         }
+                        last_error = GetLastError();
                     }
                 }
                 ERROR_FILE_NOT_FOUND => {}
@@ -101,7 +104,7 @@ fn connect(retry: bool) -> Result<HANDLE, u32> {
         }
     }
 
-    Err(ERROR_FILE_NOT_FOUND)
+    Err(last_error)
 }
 
 fn get_mpv_pid(handle: HANDLE) -> u32 {
@@ -111,16 +114,24 @@ fn get_mpv_pid(handle: HANDLE) -> u32 {
 }
 
 fn write_bytes(handle: HANDLE, data: &[u8]) -> bool {
-    unsafe {
+    let mut offset = 0;
+    while offset < data.len() {
         let mut bytes_written: u32 = 0;
-        WriteFile(
-            handle,
-            data.as_ptr(),
-            data.len() as u32,
-            &mut bytes_written,
-            std::ptr::null_mut(),
-        ) != FALSE
+        let ok = unsafe {
+            WriteFile(
+                handle,
+                data[offset..].as_ptr(),
+                (data.len() - offset) as u32,
+                &mut bytes_written,
+                std::ptr::null_mut(),
+            )
+        };
+        if ok == FALSE || bytes_written == 0 {
+            return false;
+        }
+        offset += bytes_written as usize;
     }
+    true
 }
 
 fn write_commands(handle: HANDLE, files: &[String], loadfile_mode: &str) -> bool {
