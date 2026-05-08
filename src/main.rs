@@ -55,6 +55,13 @@ fn parse_loadfile_mode(args: &[String]) -> Option<&str> {
     args.iter().find_map(|arg| arg.strip_prefix("--loadfile="))
 }
 
+fn collect_files(args: &[String]) -> Vec<String> {
+    args.iter()
+        .filter(|arg| !arg.starts_with("--"))
+        .map(|arg| mpv::resolve_file_path(arg))
+        .collect()
+}
+
 fn main() {
     unsafe {
         windows_sys::Win32::UI::HiDpi::SetProcessDpiAwareness(
@@ -83,13 +90,9 @@ fn main() {
 
     let loadfile_mode = loadfile_mode.unwrap_or(DEFAULT_LOADFILE_MODE);
 
-    let files: Vec<String> = args
-        .iter()
-        .filter(|arg| arg.as_str() != "--" && !arg.starts_with("--loadfile="))
-        .map(|arg| mpv::resolve_file_path(arg))
-        .collect();
+    let files = collect_files(&args);
 
-    let _mutex = match pipe::acquire_mutex() {
+    let _mutex_guard = match pipe::acquire_mutex() {
         Ok(guard) => guard,
         Err(MutexError::Timeout) => error_exit("Failed to acquire lock: an mpv instance is not responding."),
         Err(MutexError::Create) => error_exit("Failed to create umpv lock."),
