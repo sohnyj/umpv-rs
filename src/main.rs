@@ -55,12 +55,8 @@ fn parse_loadfile_mode(args: &[String]) -> Option<&str> {
     args.iter().find_map(|arg| arg.strip_prefix("--loadfile="))
 }
 
-fn is_url(string: &str) -> bool {
-    string.contains("://")
-}
-
 fn resolve_file_path(arg: &str) -> String {
-    if is_url(arg) {
+    if arg.contains("://") {
         return arg.to_string();
     }
     match std::path::absolute(arg) {
