@@ -42,7 +42,7 @@ jobs:
         run: cargo install cargo-xwin
 
       - name: Build
-        run: cargo xwin build --release
+        run: cargo xwin build --release --target x86_64-pc-windows-msvc
 
       - name: Compress
         working-directory: target/x86_64-pc-windows-msvc/release
