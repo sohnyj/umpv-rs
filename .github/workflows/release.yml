@@ -49,7 +49,7 @@ jobs:
         run: 7z a -mx=9 ${{ github.workspace }}/umpv-rust.7z umpv.exe
 
       - name: Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           files: umpv-rust.7z
