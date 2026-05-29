@@ -3,9 +3,9 @@ use windows_sys::Win32::System::Registry::{
     HKEY, HKEY_CURRENT_USER, KEY_READ, KEY_WRITE, REG_OPTION_NON_VOLATILE, REG_SZ, RegCloseKey,
     RegCreateKeyExW, RegDeleteTreeW, RegEnumValueW, RegOpenKeyExW, RegSetValueExW,
 };
-use windows_sys::Win32::UI::Shell::{SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_IDLIST};
+use windows_sys::Win32::UI::Shell::{SHCNE_ASSOCCHANGED, SHCNF_IDLIST, SHChangeNotify};
 
-use crate::{encode_wide, error_exit, show_message, Level, DEFAULT_LOADFILE_MODE};
+use crate::{DEFAULT_LOADFILE_MODE, Level, encode_wide, error_exit, show_message};
 
 const SUBKEY_FILE_ASSOCIATIONS: &str = r"Software\Clients\Media\mpv\Capabilities\FileAssociations";
 const SUBKEY_UMPV_PROG_ID: &str = r"Software\Classes\io.mpv.umpv";
@@ -141,8 +141,7 @@ fn set_value(key: HKEY, sub_key: &str, name: Option<&str>, data: &str) -> bool {
 }
 
 fn set_assocs(exts: impl IntoIterator<Item = impl AsRef<str>>, prog_id: &str) -> usize {
-    let Some(opened_key) = create_or_open_key(HKEY_CURRENT_USER, SUBKEY_FILE_ASSOCIATIONS)
-    else {
+    let Some(opened_key) = create_or_open_key(HKEY_CURRENT_USER, SUBKEY_FILE_ASSOCIATIONS) else {
         return 0;
     };
     let mut count = 0;
@@ -184,16 +183,23 @@ pub fn register(loadfile_mode: Option<&str>) {
 
     let loadfile_mode = if matches!(loadfile_mode, "append-play" | "insert-next-play") {
         let replacement = loadfile_mode.replace("-play", "+play");
-        show_message(Level::Warning, &format!(
-            "'{}' is deprecated since mpv 0.42.\nUsing '{}' instead.",
-            loadfile_mode, replacement
-        ));
+        show_message(
+            Level::Warning,
+            &format!(
+                "'{}' is deprecated since mpv 0.42.\nUsing '{}' instead.",
+                loadfile_mode, replacement
+            ),
+        );
         replacement
     } else {
         loadfile_mode.to_string()
     };
 
-    let command = format!("\"{}\" --loadfile={} -- \"%L\"", umpv_path.display(), loadfile_mode);
+    let command = format!(
+        "\"{}\" --loadfile={} -- \"%L\"",
+        umpv_path.display(),
+        loadfile_mode
+    );
     let command_key = format!("{}\\shell\\open\\command", SUBKEY_UMPV_PROG_ID);
     if !set_value(HKEY_CURRENT_USER, SUBKEY_UMPV_PROG_ID, None, "")
         || !set_value(HKEY_CURRENT_USER, &command_key, None, &command)
@@ -207,10 +213,13 @@ pub fn register(loadfile_mode: Option<&str>) {
     }
 
     notify_shell_change();
-    show_message(Level::Info, &format!(
-        "umpv registered for {} file extension(s).\nloadfile: {}",
-        count, loadfile_mode
-    ));
+    show_message(
+        Level::Info,
+        &format!(
+            "umpv registered for {} file extension(s).\nloadfile: {}",
+            count, loadfile_mode
+        ),
+    );
 }
 
 pub fn unregister() {
@@ -231,8 +240,8 @@ pub fn unregister() {
     delete_tree(HKEY_CURRENT_USER, SUBKEY_UMPV_PROG_ID);
 
     notify_shell_change();
-    show_message(Level::Info, &format!(
-        "umpv unregistered for {} file extension(s).",
-        count
-    ));
+    show_message(
+        Level::Info,
+        &format!("umpv unregistered for {} file extension(s).", count),
+    );
 }

@@ -1,15 +1,13 @@
 use windows_sys::Win32::Foundation::{
-    CloseHandle, GetLastError, ERROR_FILE_NOT_FOUND, ERROR_PIPE_BUSY, FALSE, GENERIC_WRITE, HANDLE,
+    CloseHandle, ERROR_FILE_NOT_FOUND, ERROR_PIPE_BUSY, FALSE, GENERIC_WRITE, GetLastError, HANDLE,
     INVALID_HANDLE_VALUE, WAIT_ABANDONED, WAIT_OBJECT_0,
 };
 use windows_sys::Win32::Storage::FileSystem::{
-    CreateFileW, WriteFile, FILE_ATTRIBUTE_NORMAL, OPEN_EXISTING, SECURITY_IDENTIFICATION,
-    SECURITY_SQOS_PRESENT,
+    CreateFileW, FILE_ATTRIBUTE_NORMAL, OPEN_EXISTING, SECURITY_IDENTIFICATION,
+    SECURITY_SQOS_PRESENT, WriteFile,
 };
 use windows_sys::Win32::System::Pipes::{GetNamedPipeServerProcessId, WaitNamedPipeW};
-use windows_sys::Win32::System::Threading::{
-    CreateMutexW, ReleaseMutex, WaitForSingleObject,
-};
+use windows_sys::Win32::System::Threading::{CreateMutexW, ReleaseMutex, WaitForSingleObject};
 
 use crate::encode_wide;
 

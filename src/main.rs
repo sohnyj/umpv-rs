@@ -104,7 +104,9 @@ fn main() {
 
     let _mutex_guard = match pipe::acquire_mutex() {
         Ok(guard) => guard,
-        Err(MutexError::Timeout) => error_exit("Failed to acquire lock: an mpv instance is not responding."),
+        Err(MutexError::Timeout) => {
+            error_exit("Failed to acquire lock: an mpv instance is not responding.")
+        }
         Err(MutexError::Create) => error_exit("Failed to create umpv lock."),
     };
 

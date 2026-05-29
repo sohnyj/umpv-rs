@@ -2,13 +2,13 @@ use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
 use std::process::Command;
 
-use windows_sys::core::BOOL;
 use windows_sys::Win32::Foundation::{FALSE, HWND, LPARAM, TRUE};
 use windows_sys::Win32::System::Threading::CREATE_NEW_PROCESS_GROUP;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, GetClassNameW, GetWindowThreadProcessId, IsIconic, SetForegroundWindow, ShowWindow,
-    SW_RESTORE,
+    EnumWindows, GetClassNameW, GetWindowThreadProcessId, IsIconic, SW_RESTORE,
+    SetForegroundWindow, ShowWindow,
 };
+use windows_sys::core::BOOL;
 
 use crate::pipe;
 
@@ -21,12 +21,8 @@ fn resolve_mpv_path() -> Option<PathBuf> {
 }
 
 pub fn launch_mpv() -> std::io::Result<()> {
-    let mpv_path = resolve_mpv_path().ok_or_else(|| {
-        std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            "mpv.exe not found.",
-        )
-    })?;
+    let mpv_path = resolve_mpv_path()
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "mpv.exe not found."))?;
     Command::new(&mpv_path)
         .arg(format!("--input-ipc-server={}", pipe::PIPE_PATH))
         .creation_flags(CREATE_NEW_PROCESS_GROUP)
