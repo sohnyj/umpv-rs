@@ -5,7 +5,9 @@ use windows_sys::Win32::System::Registry::{
 };
 use windows_sys::Win32::UI::Shell::{SHCNE_ASSOCCHANGED, SHCNF_IDLIST, SHChangeNotify};
 
-use crate::{DEFAULT_LOADFILE_MODE, Level, encode_wide, error_exit, show_message};
+use crate::{
+    DEFAULT_IDLESCREEN, DEFAULT_LOADFILE_MODE, Level, encode_wide, error_exit, show_message,
+};
 
 const SUBKEY_FILE_ASSOCIATIONS: &str = r"Software\Clients\Media\mpv\Capabilities\FileAssociations";
 const SUBKEY_UMPV_PROG_ID: &str = r"Software\Classes\io.mpv.umpv";
@@ -159,7 +161,7 @@ fn delete_tree(key: HKEY, sub_key: &str) {
     unsafe { RegDeleteTreeW(key, sub_key_wide.as_ptr()) };
 }
 
-pub fn register(loadfile_mode: Option<&str>) {
+pub fn register(loadfile_mode: Option<&str>, idlescreen: Option<&str>) {
     let assocs = read_assocs(HKEY_CURRENT_USER, SUBKEY_FILE_ASSOCIATIONS);
     if assocs.is_empty() {
         error_exit("No mpv file associations found.\nRun 'mpv.exe --register' first.");
@@ -167,6 +169,14 @@ pub fn register(loadfile_mode: Option<&str>) {
 
     let umpv_path = std::env::current_exe().expect("umpv.exe path");
     let loadfile_mode = loadfile_mode.unwrap_or(DEFAULT_LOADFILE_MODE);
+    let idlescreen = idlescreen.unwrap_or(DEFAULT_IDLESCREEN);
+
+    if !matches!(idlescreen, "yes" | "no") {
+        error_exit(&format!(
+            "Unsupported idlescreen value: {}\nUse 'yes' or 'no'.",
+            idlescreen
+        ));
+    }
 
     if !matches!(
         loadfile_mode,
@@ -196,9 +206,10 @@ pub fn register(loadfile_mode: Option<&str>) {
     };
 
     let command = format!(
-        "\"{}\" --loadfile={} -- \"%L\"",
+        "\"{}\" --loadfile={} --idlescreen={} -- \"%L\"",
         umpv_path.display(),
-        loadfile_mode
+        loadfile_mode,
+        idlescreen
     );
     let command_key = format!("{}\\shell\\open\\command", SUBKEY_UMPV_PROG_ID);
     if !set_value(HKEY_CURRENT_USER, SUBKEY_UMPV_PROG_ID, None, "")
@@ -216,8 +227,8 @@ pub fn register(loadfile_mode: Option<&str>) {
     show_message(
         Level::Info,
         &format!(
-            "umpv registered for {} file extension(s).\nloadfile: {}",
-            count, loadfile_mode
+            "umpv registered for {} file extension(s).\nloadfile: {}\nidlescreen: {}",
+            count, loadfile_mode, idlescreen
         ),
     );
 }
