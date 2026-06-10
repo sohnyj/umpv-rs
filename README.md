@@ -18,8 +18,7 @@ A single-instance mpv launcher for Windows, written in Rust. Based on the [umpv]
 
 Specify the extensions you want. Leave a category empty (`=`) to skip it.
 
-> [!NOTE]
-> **Running the register command with Administrator privileges is not recommended,** as umpv does not support system-wide associations.
+**umpv does not support system-wide associations.**
 
 ### 2. Add umpv to mpv's registered extensions
 
@@ -88,16 +87,29 @@ Setting `no` avoids a brief idle-logo flash when umpv launches a new mpv instanc
 
 ## Cross-compiling
 
+umpv is cross-compiled from Linux (including WSL) to the `x86_64-pc-windows-msvc` target. CI builds use the same toolchain ([build.yml](.github/workflows/build.yml)).
+
 ### Requirements
 
 - [Rust](https://www.rust-lang.org/) with the `x86_64-pc-windows-msvc` target
-- [cargo-xwin](https://github.com/rust-cross/cargo-xwin)
-- `llvm-rc`: included in the [LLVM](https://llvm.org/) package (`llvm` on apt, `llvm` on Homebrew)
+- [cargo-xwin](https://github.com/rust-cross/cargo-xwin): downloads the MSVC CRT and Windows SDK automatically
+- [LLVM](https://llvm.org/) tools:
+  - `llvm-rc`: compiles the icon resource; requires `clang` for preprocessing
+  - `lld-link`: linker for the MSVC target
+- A host C toolchain (`cc`): required to compile build scripts and cargo-xwin itself
 
-### Setup
+### Setup (Ubuntu / WSL)
 
 ```bash
+# Rust toolchain
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+source ~/.cargo/env
 rustup target add x86_64-pc-windows-msvc
+
+# Host C toolchain and LLVM tools
+sudo apt-get install -y build-essential llvm clang lld
+
+# cargo-xwin
 cargo install cargo-xwin
 ```
 
