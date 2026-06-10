@@ -11,12 +11,12 @@ use windows_sys::Win32::System::Threading::{CreateMutexW, ReleaseMutex, WaitForS
 
 use crate::encode_wide;
 
-pub enum MutexError {
+pub(crate) enum MutexError {
     Create,
     Timeout,
 }
 
-pub enum SendError {
+pub(crate) enum SendError {
     Connect(u32),
     Write,
 }
@@ -24,11 +24,11 @@ pub enum SendError {
 const MUTEX_NAME: &str = "umpv_mutex";
 const MUTEX_TIMEOUT_MS: u32 = 10_000;
 const PIPE_BUSY_TIMEOUT_MS: u32 = 5_000;
-pub const PIPE_PATH: &str = r"\\.\pipe\umpv";
+pub(crate) const PIPE_PATH: &str = r"\\.\pipe\umpv";
 const RETRY_INTERVAL_MS: u64 = 100;
 const RETRY_MAX_ATTEMPTS: u32 = 50;
 
-pub struct MutexGuard(HANDLE);
+pub(crate) struct MutexGuard(HANDLE);
 
 impl Drop for MutexGuard {
     fn drop(&mut self) {
@@ -39,7 +39,7 @@ impl Drop for MutexGuard {
     }
 }
 
-pub fn acquire_mutex() -> Result<MutexGuard, MutexError> {
+pub(crate) fn acquire_mutex() -> Result<MutexGuard, MutexError> {
     let mutex_name_wide = encode_wide(MUTEX_NAME);
     unsafe {
         let handle = CreateMutexW(std::ptr::null(), 0, mutex_name_wide.as_ptr());
@@ -55,7 +55,7 @@ pub fn acquire_mutex() -> Result<MutexGuard, MutexError> {
     }
 }
 
-fn open(pipe_path_wide: &[u16]) -> HANDLE {
+fn open_pipe(pipe_path_wide: &[u16]) -> HANDLE {
     unsafe {
         CreateFileW(
             pipe_path_wide.as_ptr(),
@@ -79,7 +79,7 @@ fn connect(retry: bool) -> Result<HANDLE, u32> {
             std::thread::sleep(std::time::Duration::from_millis(RETRY_INTERVAL_MS));
         }
 
-        let handle = open(&pipe_path_wide);
+        let handle = open_pipe(&pipe_path_wide);
         if handle != INVALID_HANDLE_VALUE {
             return Ok(handle);
         }
@@ -89,7 +89,7 @@ fn connect(retry: bool) -> Result<HANDLE, u32> {
             match last_error {
                 ERROR_PIPE_BUSY => {
                     if WaitNamedPipeW(pipe_path_wide.as_ptr(), PIPE_BUSY_TIMEOUT_MS) != FALSE {
-                        let handle = open(&pipe_path_wide);
+                        let handle = open_pipe(&pipe_path_wide);
                         if handle != INVALID_HANDLE_VALUE {
                             return Ok(handle);
                         }
@@ -105,7 +105,7 @@ fn connect(retry: bool) -> Result<HANDLE, u32> {
     Err(last_error)
 }
 
-fn get_mpv_pid(handle: HANDLE) -> u32 {
+fn server_pid(handle: HANDLE) -> u32 {
     let mut pid: u32 = 0;
     unsafe { GetNamedPipeServerProcessId(handle, &mut pid) };
     pid
@@ -132,7 +132,7 @@ fn write_bytes(handle: HANDLE, data: &[u8]) -> bool {
     true
 }
 
-fn write_commands(handle: HANDLE, files: &[String], loadfile_mode: &str) -> bool {
+fn write_commands(handle: HANDLE, files: &[String], loadfile: &str) -> bool {
     let mut buffer = String::new();
     for file in files {
         buffer.push_str("raw loadfile \"");
@@ -145,16 +145,16 @@ fn write_commands(handle: HANDLE, files: &[String], loadfile_mode: &str) -> bool
             }
         }
         buffer.push_str("\" ");
-        buffer.push_str(loadfile_mode);
+        buffer.push_str(loadfile);
         buffer.push('\n');
     }
     write_bytes(handle, buffer.as_bytes())
 }
 
-pub fn send_files(files: &[String], loadfile_mode: &str, retry: bool) -> Result<u32, SendError> {
+pub(crate) fn send_files(files: &[String], loadfile: &str, retry: bool) -> Result<u32, SendError> {
     let handle = connect(retry).map_err(SendError::Connect)?;
-    let pid = get_mpv_pid(handle);
-    let ok = write_commands(handle, files, loadfile_mode);
+    let pid = server_pid(handle);
+    let ok = write_commands(handle, files, loadfile);
     unsafe { CloseHandle(handle) };
     if ok { Ok(pid) } else { Err(SendError::Write) }
 }

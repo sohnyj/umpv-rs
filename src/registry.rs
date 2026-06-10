@@ -5,9 +5,7 @@ use windows_sys::Win32::System::Registry::{
 };
 use windows_sys::Win32::UI::Shell::{SHCNE_ASSOCCHANGED, SHCNF_IDLIST, SHChangeNotify};
 
-use crate::{
-    DEFAULT_IDLESCREEN, DEFAULT_LOADFILE_MODE, Level, encode_wide, error_exit, show_message,
-};
+use crate::{DEFAULT_IDLESCREEN, DEFAULT_LOADFILE, Level, encode_wide, error_exit, show_message};
 
 const SUBKEY_FILE_ASSOCIATIONS: &str = r"Software\Clients\Media\mpv\Capabilities\FileAssociations";
 const SUBKEY_UMPV_PROG_ID: &str = r"Software\Classes\io.mpv.umpv";
@@ -161,25 +159,24 @@ fn delete_tree(key: HKEY, sub_key: &str) {
     unsafe { RegDeleteTreeW(key, sub_key_wide.as_ptr()) };
 }
 
-pub fn register(loadfile_mode: Option<&str>, idlescreen: Option<&str>) {
+pub(crate) fn register(loadfile: Option<&str>, idlescreen: Option<&str>) {
     let assocs = read_assocs(HKEY_CURRENT_USER, SUBKEY_FILE_ASSOCIATIONS);
     if assocs.is_empty() {
         error_exit("No mpv file associations found.\nRun 'mpv.exe --register' first.");
     }
 
     let umpv_path = std::env::current_exe().expect("umpv.exe path");
-    let loadfile_mode = loadfile_mode.unwrap_or(DEFAULT_LOADFILE_MODE);
+    let loadfile = loadfile.unwrap_or(DEFAULT_LOADFILE);
     let idlescreen = idlescreen.unwrap_or(DEFAULT_IDLESCREEN);
 
     if !matches!(idlescreen, "yes" | "no") {
         error_exit(&format!(
-            "Unsupported idlescreen value: {}\nUse 'yes' or 'no'.",
-            idlescreen
+            "Unsupported idlescreen value: {idlescreen}\nUse 'yes' or 'no'."
         ));
     }
 
     if !matches!(
-        loadfile_mode,
+        loadfile,
         "replace"
             | "append"
             | "append+play"
@@ -188,30 +185,27 @@ pub fn register(loadfile_mode: Option<&str>, idlescreen: Option<&str>) {
             | "insert-next+play"
             | "insert-next-play"
     ) {
-        error_exit(&format!("Unsupported loadfile flag: {}", loadfile_mode));
+        error_exit(&format!("Unsupported loadfile flag: {loadfile}"));
     }
 
-    let loadfile_mode = if matches!(loadfile_mode, "append-play" | "insert-next-play") {
-        let replacement = loadfile_mode.replace("-play", "+play");
+    let loadfile = if matches!(loadfile, "append-play" | "insert-next-play") {
+        let replacement = loadfile.replace("-play", "+play");
         show_message(
             Level::Warning,
-            &format!(
-                "'{}' is deprecated since mpv 0.42.\nUsing '{}' instead.",
-                loadfile_mode, replacement
-            ),
+            &format!("'{loadfile}' is deprecated since mpv 0.42.\nUsing '{replacement}' instead."),
         );
         replacement
     } else {
-        loadfile_mode.to_string()
+        loadfile.to_string()
     };
 
     let command = format!(
         "\"{}\" --loadfile={} --idlescreen={} -- \"%L\"",
         umpv_path.display(),
-        loadfile_mode,
+        loadfile,
         idlescreen
     );
-    let command_key = format!("{}\\shell\\open\\command", SUBKEY_UMPV_PROG_ID);
+    let command_key = format!("{SUBKEY_UMPV_PROG_ID}\\shell\\open\\command");
     if !set_value(HKEY_CURRENT_USER, SUBKEY_UMPV_PROG_ID, None, "")
         || !set_value(HKEY_CURRENT_USER, &command_key, None, &command)
     {
@@ -227,13 +221,12 @@ pub fn register(loadfile_mode: Option<&str>, idlescreen: Option<&str>) {
     show_message(
         Level::Info,
         &format!(
-            "umpv registered for {} file extension(s).\nloadfile: {}\nidlescreen: {}",
-            count, loadfile_mode, idlescreen
+            "umpv registered for {count} file extension(s).\nloadfile: {loadfile}\nidlescreen: {idlescreen}"
         ),
     );
 }
 
-pub fn unregister() {
+pub(crate) fn unregister() {
     let assocs = read_assocs(HKEY_CURRENT_USER, SUBKEY_FILE_ASSOCIATIONS);
 
     let umpv_assocs: Vec<_> = assocs
@@ -253,6 +246,6 @@ pub fn unregister() {
     notify_shell_change();
     show_message(
         Level::Info,
-        &format!("umpv unregistered for {} file extension(s).", count),
+        &format!("umpv unregistered for {count} file extension(s)."),
     );
 }

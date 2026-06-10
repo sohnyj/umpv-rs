@@ -20,18 +20,18 @@ fn resolve_mpv_path() -> Option<PathBuf> {
         .and_then(|exe| exe.parent().map(|dir| dir.join("mpv.exe")))
 }
 
-pub fn launch_mpv(idlescreen: &str) -> std::io::Result<()> {
+pub(crate) fn launch_mpv(idlescreen: &str) -> std::io::Result<()> {
     let mpv_path = resolve_mpv_path()
         .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "mpv.exe not found."))?;
     Command::new(&mpv_path)
         .arg(format!("--input-ipc-server={}", pipe::PIPE_PATH))
-        .arg(format!("--script-opts=osc-idlescreen={}", idlescreen))
+        .arg(format!("--script-opts=osc-idlescreen={idlescreen}"))
         .creation_flags(CREATE_NEW_PROCESS_GROUP)
         .spawn()?;
     Ok(())
 }
 
-unsafe extern "system" fn find_mpv_window(hwnd: HWND, lparam: LPARAM) -> BOOL {
+unsafe extern "system" fn activate_window_if_mpv(hwnd: HWND, lparam: LPARAM) -> BOOL {
     unsafe {
         let target_pid = lparam as u32;
         let mut pid: u32 = 0;
@@ -52,9 +52,9 @@ unsafe extern "system" fn find_mpv_window(hwnd: HWND, lparam: LPARAM) -> BOOL {
     }
 }
 
-pub fn activate_mpv_window(pid: u32) {
+pub(crate) fn activate_mpv_window(pid: u32) {
     if pid == 0 {
         return;
     }
-    unsafe { EnumWindows(Some(find_mpv_window), pid as LPARAM) };
+    unsafe { EnumWindows(Some(activate_window_if_mpv), pid as LPARAM) };
 }
