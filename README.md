@@ -73,8 +73,6 @@ The following flags are not supported:
 | `insert-at` | umpv alone cannot determine the playlist index |
 | `insert-at+play` | umpv alone cannot determine the playlist index |
 
-URLs (`scheme://...`) are passed through to mpv as-is without path resolution.
-
 See the [mpv documentation](https://mpv.io/manual/master/#command-interface-[%3Coptions%3E]]]) for the full list of options.
 
 ## Idlescreen

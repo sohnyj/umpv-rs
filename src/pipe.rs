@@ -132,29 +132,26 @@ fn write_bytes(handle: HANDLE, data: &[u8]) -> bool {
     true
 }
 
-fn write_commands(handle: HANDLE, files: &[String], loadfile: &str) -> bool {
-    let mut buffer = String::new();
-    for file in files {
-        buffer.push_str("raw loadfile \"");
-        for ch in file.chars() {
-            match ch {
-                '\\' => buffer.push_str("\\\\"),
-                '"' => buffer.push_str("\\\""),
-                '\n' => buffer.push_str("\\n"),
-                _ => buffer.push(ch),
-            }
+fn write_command(handle: HANDLE, file: &str, loadfile: &str) -> bool {
+    let mut buffer = String::from("raw loadfile \"");
+    for ch in file.chars() {
+        match ch {
+            '\\' => buffer.push_str("\\\\"),
+            '"' => buffer.push_str("\\\""),
+            '\n' => buffer.push_str("\\n"),
+            _ => buffer.push(ch),
         }
-        buffer.push_str("\" ");
-        buffer.push_str(loadfile);
-        buffer.push('\n');
     }
+    buffer.push_str("\" ");
+    buffer.push_str(loadfile);
+    buffer.push('\n');
     write_bytes(handle, buffer.as_bytes())
 }
 
-pub(crate) fn send_files(files: &[String], loadfile: &str, retry: bool) -> Result<u32, SendError> {
+pub(crate) fn send_file(file: &str, loadfile: &str, retry: bool) -> Result<u32, SendError> {
     let handle = connect(retry).map_err(SendError::Connect)?;
     let pid = server_pid(handle);
-    let ok = write_commands(handle, files, loadfile);
+    let ok = write_command(handle, file, loadfile);
     unsafe { CloseHandle(handle) };
     if ok { Ok(pid) } else { Err(SendError::Write) }
 }

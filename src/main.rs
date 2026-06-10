@@ -62,20 +62,16 @@ fn parse_idlescreen(args: &[String]) -> Option<&str> {
 }
 
 fn resolve_file_path(arg: &str) -> String {
-    if arg.contains("://") {
-        return arg.to_string();
-    }
     match std::path::absolute(arg) {
         Ok(path) => path.to_string_lossy().into_owned(),
         Err(_) => arg.to_string(),
     }
 }
 
-fn collect_files(args: &[String]) -> Vec<String> {
+fn find_file(args: &[String]) -> Option<String> {
     args.iter()
-        .filter(|arg| !arg.starts_with("--"))
+        .find(|arg| !arg.starts_with("--"))
         .map(|arg| resolve_file_path(arg))
-        .collect()
 }
 
 fn main() {
@@ -101,14 +97,12 @@ fn main() {
         _ => {}
     }
 
-    if args.is_empty() {
+    let Some(file) = find_file(&args) else {
         return;
-    }
+    };
 
     let loadfile = loadfile.unwrap_or(DEFAULT_LOADFILE);
     let idlescreen = idlescreen.unwrap_or(DEFAULT_IDLESCREEN);
-
-    let files = collect_files(&args);
 
     let _mutex_guard = match pipe::acquire_mutex() {
         Ok(guard) => guard,
@@ -118,14 +112,14 @@ fn main() {
         Err(MutexError::Create) => error_exit("Failed to create umpv lock."),
     };
 
-    match pipe::send_files(&files, loadfile, false) {
+    match pipe::send_file(&file, loadfile, false) {
         Ok(pid) => mpv::activate_mpv_window(pid),
         Err(SendError::Connect(ERROR_FILE_NOT_FOUND)) => {
             if let Err(err) = mpv::launch_mpv(idlescreen) {
                 error_exit(&format!("Failed to launch mpv: {err}"));
             }
-            if pipe::send_files(&files, loadfile, true).is_err() {
-                error_exit("Failed to send files to mpv.");
+            if pipe::send_file(&file, loadfile, true).is_err() {
+                error_exit("Failed to send the file to mpv.");
             }
         }
         Err(_) => error_exit("Failed to connect to mpv."),
