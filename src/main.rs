@@ -15,6 +15,17 @@ mod registry;
 
 const DEFAULT_LOADFILE: &str = "replace";
 
+const HELP_TEXT: &str = "\
+umpv — a single-instance mpv launcher for Windows.
+
+Usage:
+  umpv.exe --register         Register umpv for mpv's file associations.
+  umpv.exe --loadfile=<mode>  replace, append, append+play, insert-next, insert-next+play. (default: replace)
+  umpv.exe --unregister       Restore mpv's original file associations.
+  umpv.exe --help             Show this help.
+
+Place umpv.exe in the same directory as mpv.exe.";
+
 fn encode_wide(string: &str) -> Vec<u16> {
     std::ffi::OsStr::new(string)
         .encode_wide()
@@ -28,14 +39,9 @@ enum Level {
     Warning,
 }
 
-fn show_message(level: Level, text: &str) {
-    let prefix = match level {
-        Level::Error => "Error",
-        Level::Info => "Info",
-        Level::Warning => "Warning",
-    };
-    let text_wide = encode_wide(&format!("{prefix}: {text}"));
-    let caption_wide = encode_wide("umpv");
+fn message_box(text: &str, caption: &str) {
+    let text_wide = encode_wide(text);
+    let caption_wide = encode_wide(caption);
     unsafe {
         MessageBoxW(
             std::ptr::null_mut(),
@@ -44,6 +50,19 @@ fn show_message(level: Level, text: &str) {
             0,
         );
     }
+}
+
+fn show_message(level: Level, text: &str) {
+    let prefix = match level {
+        Level::Error => "Error",
+        Level::Info => "Info",
+        Level::Warning => "Warning",
+    };
+    message_box(&format!("{prefix}: {text}"), "umpv");
+}
+
+fn show_help() {
+    message_box(HELP_TEXT, "umpv");
 }
 
 fn error_exit(text: &str) -> ! {
@@ -77,6 +96,11 @@ fn main() {
 
     let args: Vec<String> = env::args().skip(1).collect();
     let loadfile = parse_loadfile(&args);
+
+    if args.is_empty() || args.iter().any(|arg| arg == "--help") {
+        show_help();
+        return;
+    }
 
     match args.first().map(String::as_str) {
         Some("--register") => {
