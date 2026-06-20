@@ -69,7 +69,7 @@ fn open_pipe(pipe_path_wide: &[u16]) -> HANDLE {
     }
 }
 
-fn connect(retry: bool) -> Result<HANDLE, u32> {
+fn connect_pipe(retry: bool) -> Result<HANDLE, u32> {
     let pipe_path_wide = encode_wide(PIPE_PATH);
     let max_attempts = if retry { RETRY_MAX_ATTEMPTS } else { 1 };
     let mut last_error = ERROR_FILE_NOT_FOUND;
@@ -149,7 +149,7 @@ fn write_command(handle: HANDLE, file: &str, loadfile: &str) -> bool {
 }
 
 pub(crate) fn send_file(file: &str, loadfile: &str, retry: bool) -> Result<u32, SendError> {
-    let handle = connect(retry).map_err(SendError::Connect)?;
+    let handle = connect_pipe(retry).map_err(SendError::Connect)?;
     let pid = server_pid(handle);
     let ok = write_command(handle, file, loadfile);
     unsafe { CloseHandle(handle) };
