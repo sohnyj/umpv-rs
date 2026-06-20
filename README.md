@@ -5,6 +5,7 @@ A single-instance mpv launcher for Windows, written in Rust. Based on the [umpv]
 ## Minimum Requirements
 
 - OS: Windows 10+ (x64)
+- CPU: x86_64-v3 (AVX2 support required)
 
 ## Usage
 
