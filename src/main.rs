@@ -14,7 +14,6 @@ mod pipe;
 mod registry;
 
 const DEFAULT_LOADFILE: &str = "replace";
-const DEFAULT_IDLESCREEN: &str = "no";
 
 fn encode_wide(string: &str) -> Vec<u16> {
     std::ffi::OsStr::new(string)
@@ -56,11 +55,6 @@ fn parse_loadfile(args: &[String]) -> Option<&str> {
     args.iter().find_map(|arg| arg.strip_prefix("--loadfile="))
 }
 
-fn parse_idlescreen(args: &[String]) -> Option<&str> {
-    args.iter()
-        .find_map(|arg| arg.strip_prefix("--idlescreen="))
-}
-
 fn resolve_file_path(arg: &str) -> String {
     match std::path::absolute(arg) {
         Ok(path) => path.to_string_lossy().into_owned(),
@@ -83,11 +77,10 @@ fn main() {
 
     let args: Vec<String> = env::args().skip(1).collect();
     let loadfile = parse_loadfile(&args);
-    let idlescreen = parse_idlescreen(&args);
 
     match args.first().map(String::as_str) {
         Some("--register") => {
-            registry::register(loadfile, idlescreen);
+            registry::register(loadfile);
             return;
         }
         Some("--unregister") => {
@@ -102,7 +95,6 @@ fn main() {
     };
 
     let loadfile = loadfile.unwrap_or(DEFAULT_LOADFILE);
-    let idlescreen = idlescreen.unwrap_or(DEFAULT_IDLESCREEN);
 
     let _mutex_guard = match pipe::acquire_mutex() {
         Ok(guard) => guard,
@@ -115,7 +107,7 @@ fn main() {
     match pipe::send_file(&file, loadfile, false) {
         Ok(pid) => mpv::activate_mpv_window(pid),
         Err(SendError::Connect(ERROR_FILE_NOT_FOUND)) => {
-            if let Err(err) = mpv::launch_mpv(idlescreen) {
+            if let Err(err) = mpv::launch_mpv() {
                 error_exit(&format!("Failed to launch mpv: {err}"));
             }
             if pipe::send_file(&file, loadfile, true).is_err() {

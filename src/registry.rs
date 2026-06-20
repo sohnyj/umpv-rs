@@ -5,7 +5,7 @@ use windows_sys::Win32::System::Registry::{
 };
 use windows_sys::Win32::UI::Shell::{SHCNE_ASSOCCHANGED, SHCNF_IDLIST, SHChangeNotify};
 
-use crate::{DEFAULT_IDLESCREEN, DEFAULT_LOADFILE, Level, encode_wide, error_exit, show_message};
+use crate::{DEFAULT_LOADFILE, Level, encode_wide, error_exit, show_message};
 
 const SUBKEY_FILE_ASSOCIATIONS: &str = r"Software\Clients\Media\mpv\Capabilities\FileAssociations";
 const SUBKEY_UMPV_PROG_ID: &str = r"Software\Classes\io.mpv.umpv";
@@ -159,7 +159,7 @@ fn delete_tree(key: HKEY, sub_key: &str) {
     unsafe { RegDeleteTreeW(key, sub_key_wide.as_ptr()) };
 }
 
-pub(crate) fn register(loadfile: Option<&str>, idlescreen: Option<&str>) {
+pub(crate) fn register(loadfile: Option<&str>) {
     let assocs = read_assocs(HKEY_CURRENT_USER, SUBKEY_FILE_ASSOCIATIONS);
     if assocs.is_empty() {
         error_exit("No mpv file associations found.\nRun 'mpv.exe --register' first.");
@@ -167,13 +167,6 @@ pub(crate) fn register(loadfile: Option<&str>, idlescreen: Option<&str>) {
 
     let umpv_path = std::env::current_exe().expect("umpv.exe path");
     let loadfile = loadfile.unwrap_or(DEFAULT_LOADFILE);
-    let idlescreen = idlescreen.unwrap_or(DEFAULT_IDLESCREEN);
-
-    if !matches!(idlescreen, "yes" | "no") {
-        error_exit(&format!(
-            "Unsupported idlescreen value: {idlescreen}\nUse 'yes' or 'no'."
-        ));
-    }
 
     if !matches!(
         loadfile,
@@ -200,10 +193,9 @@ pub(crate) fn register(loadfile: Option<&str>, idlescreen: Option<&str>) {
     };
 
     let command = format!(
-        "\"{}\" --loadfile={} --idlescreen={} -- \"%L\"",
+        "\"{}\" --loadfile={} -- \"%L\"",
         umpv_path.display(),
-        loadfile,
-        idlescreen
+        loadfile
     );
     let command_key = format!("{SUBKEY_UMPV_PROG_ID}\\shell\\open\\command");
     if !set_value(HKEY_CURRENT_USER, SUBKEY_UMPV_PROG_ID, None, "")
@@ -220,9 +212,7 @@ pub(crate) fn register(loadfile: Option<&str>, idlescreen: Option<&str>) {
     notify_shell_change();
     show_message(
         Level::Info,
-        &format!(
-            "umpv registered for {count} file extension(s).\nloadfile: {loadfile}\nidlescreen: {idlescreen}"
-        ),
+        &format!("umpv registered for {count} file extension(s).\nloadfile: {loadfile}"),
     );
 }
 
