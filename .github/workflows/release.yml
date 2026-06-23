@@ -20,6 +20,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Get version
         id: version
@@ -63,10 +65,25 @@ jobs:
             echo "No existing release/tag for '$TAG' — nothing to clean up."
           fi
 
-      - name: Release
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          target_commitish: ${{ github.sha }}
-          generate_release_notes: true
-          files: umpv-rust.7z
+      - name: Build release notes from commit log
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
+          if [ -n "$PREV_TAG" ]; then
+            echo "Generating notes for range $PREV_TAG..HEAD"
+            git log "$PREV_TAG..HEAD" --no-merges --pretty=format:'- %s (%h)' > RELEASE_NOTES.md
+          else
+            echo "No previous tag found — listing all commits"
+            git log --no-merges --pretty=format:'- %s (%h)' > RELEASE_NOTES.md
+          fi
+          echo "" >> RELEASE_NOTES.md
+          cat RELEASE_NOTES.md
+
+      - name: Publish to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" \
+            "${{ github.workspace }}/umpv-rust.7z" \
+            --target "${{ github.sha }}" \
+            --title "${{ steps.version.outputs.tag }}" \
+            --notes-file RELEASE_NOTES.md
