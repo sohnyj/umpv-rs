@@ -13,19 +13,6 @@ mod mpv;
 mod pipe;
 mod registry;
 
-const DEFAULT_LOADFILE: &str = "replace";
-
-const HELP_TEXT: &str = "\
-umpv — a single-instance mpv launcher for Windows.
-
-Usage:
-  umpv.exe --register         Register umpv for mpv's file associations.
-  umpv.exe --loadfile=<mode>  replace, append, append+play, insert-next, insert-next+play. (default: replace)
-  umpv.exe --unregister       Restore mpv's original file associations.
-  umpv.exe --help             Show this help.
-
-Place umpv.exe in the same directory as mpv.exe.";
-
 fn encode_wide(string: &str) -> Vec<u16> {
     std::ffi::OsStr::new(string)
         .encode_wide()
@@ -61,6 +48,17 @@ fn show_message(level: Level, text: &str) {
     message_box(&format!("{prefix}: {text}"), "umpv");
 }
 
+const HELP_TEXT: &str = "\
+umpv — a single-instance mpv launcher for Windows.
+
+Usage:
+  umpv.exe --register         Register umpv for mpv's file associations.
+  umpv.exe --loadfile=<mode>  replace(default), append, append+play, insert-next, insert-next+play.
+  umpv.exe --unregister       Restore mpv's original file associations.
+  umpv.exe --help             Show this help.
+
+Place umpv.exe in the same directory as mpv.exe.";
+
 fn show_help() {
     message_box(HELP_TEXT, "umpv");
 }
@@ -86,6 +84,8 @@ fn find_file(args: &[String]) -> Option<String> {
         .find(|arg| !arg.starts_with("--"))
         .map(|arg| resolve_file_path(arg))
 }
+
+const DEFAULT_LOADFILE: &str = "replace";
 
 fn main() {
     unsafe {

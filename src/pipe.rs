@@ -21,12 +21,7 @@ pub(crate) enum SendError {
     Write,
 }
 
-const MUTEX_NAME: &str = "umpv_mutex";
-const MUTEX_TIMEOUT_MS: u32 = 10_000;
-const PIPE_BUSY_TIMEOUT_MS: u32 = 5_000;
 pub(crate) const PIPE_PATH: &str = r"\\.\pipe\umpv";
-const RETRY_INTERVAL_MS: u64 = 100;
-const RETRY_MAX_ATTEMPTS: u32 = 50;
 
 pub(crate) struct MutexGuard(HANDLE);
 
@@ -38,6 +33,9 @@ impl Drop for MutexGuard {
         }
     }
 }
+
+const MUTEX_NAME: &str = "umpv_mutex";
+const MUTEX_TIMEOUT_MS: u32 = 10_000;
 
 pub(crate) fn acquire_mutex() -> Result<MutexGuard, MutexError> {
     let mutex_name_wide = encode_wide(MUTEX_NAME);
@@ -68,6 +66,10 @@ fn open_pipe(pipe_path_wide: &[u16]) -> HANDLE {
         )
     }
 }
+
+const PIPE_BUSY_TIMEOUT_MS: u32 = 5_000;
+const RETRY_INTERVAL_MS: u64 = 100;
+const RETRY_MAX_ATTEMPTS: u32 = 50;
 
 fn connect_pipe(retry: bool) -> Result<HANDLE, u32> {
     let pipe_path_wide = encode_wide(PIPE_PATH);

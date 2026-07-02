@@ -12,8 +12,6 @@ use windows_sys::core::BOOL;
 
 use crate::pipe;
 
-const MPV_WINDOW_CLASS_NAME: [u16; 3] = [b'm' as u16, b'p' as u16, b'v' as u16];
-
 fn resolve_mpv_path() -> Option<PathBuf> {
     std::env::current_exe()
         .ok()
@@ -29,6 +27,8 @@ pub(crate) fn launch_mpv() -> std::io::Result<()> {
         .spawn()?;
     Ok(())
 }
+
+const MPV_WINDOW_CLASS_NAME: [u16; 3] = [b'm' as u16, b'p' as u16, b'v' as u16];
 
 unsafe extern "system" fn activate_window_if_mpv(hwnd: HWND, lparam: LPARAM) -> BOOL {
     unsafe {
