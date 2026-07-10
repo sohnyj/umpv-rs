@@ -40,7 +40,7 @@ const MUTEX_TIMEOUT_MS: u32 = 10_000;
 pub(crate) fn acquire_mutex() -> Result<MutexGuard, MutexError> {
     let mutex_name_wide = encode_wide(MUTEX_NAME);
     unsafe {
-        let handle = CreateMutexW(std::ptr::null(), 0, mutex_name_wide.as_ptr());
+        let handle = CreateMutexW(std::ptr::null(), FALSE, mutex_name_wide.as_ptr());
         if handle.is_null() {
             return Err(MutexError::Create);
         }
@@ -109,7 +109,7 @@ fn connect_pipe(retry: bool) -> Result<HANDLE, u32> {
 
 fn server_pid(handle: HANDLE) -> u32 {
     let mut pid: u32 = 0;
-    unsafe { GetNamedPipeServerProcessId(handle, &mut pid) };
+    unsafe { GetNamedPipeServerProcessId(handle, &raw mut pid) };
     pid
 }
 
@@ -122,7 +122,7 @@ fn write_bytes(handle: HANDLE, data: &[u8]) -> bool {
                 handle,
                 data[offset..].as_ptr(),
                 (data.len() - offset) as u32,
-                &mut bytes_written,
+                &raw mut bytes_written,
                 std::ptr::null_mut(),
             )
         };

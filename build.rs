@@ -1,5 +1,5 @@
 fn main() {
-    if std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default() == "windows" {
+    if std::env::var("CARGO_CFG_TARGET_OS").is_ok_and(|target_os| target_os == "windows") {
         println!("cargo:rerun-if-changed=res/mpv-icon.ico");
         println!("cargo:rerun-if-changed=res/umpv.rc");
 

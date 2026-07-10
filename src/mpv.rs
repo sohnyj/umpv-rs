@@ -34,7 +34,7 @@ unsafe extern "system" fn activate_window_if_mpv(hwnd: HWND, lparam: LPARAM) -> 
     unsafe {
         let target_pid = lparam as u32;
         let mut pid: u32 = 0;
-        GetWindowThreadProcessId(hwnd, &mut pid);
+        GetWindowThreadProcessId(hwnd, &raw mut pid);
         if pid != target_pid {
             return TRUE;
         }

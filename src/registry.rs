@@ -15,7 +15,7 @@ const MPV_PROG_ID: &str = "io.mpv.file";
 fn notify_shell_change() {
     unsafe {
         SHChangeNotify(
-            SHCNE_ASSOCCHANGED as i32,
+            SHCNE_ASSOCCHANGED.cast_signed(),
             SHCNF_IDLIST,
             std::ptr::null(),
             std::ptr::null(),
@@ -28,7 +28,7 @@ fn read_values(key: HKEY, sub_key: &str) -> Vec<(String, String)> {
     let mut results = Vec::new();
     unsafe {
         let mut opened_key: HKEY = std::ptr::null_mut();
-        if RegOpenKeyExW(key, sub_key_wide.as_ptr(), 0, KEY_READ, &mut opened_key) as u32
+        if RegOpenKeyExW(key, sub_key_wide.as_ptr(), 0, KEY_READ, &raw mut opened_key) as u32
             != ERROR_SUCCESS
         {
             return results;
@@ -37,20 +37,20 @@ fn read_values(key: HKEY, sub_key: &str) -> Vec<(String, String)> {
         let mut index: u32 = 0;
         loop {
             let mut name_buffer = [0u16; 256];
-            let mut name_length: u32 = 256;
+            let mut name_length = name_buffer.len() as u32;
             let mut data_buffer = [0u16; 1024];
-            let mut data_length = std::mem::size_of_val(&data_buffer) as u32;
+            let mut data_length = size_of_val(&data_buffer) as u32;
             let mut value_type: u32 = 0;
 
             let status = RegEnumValueW(
                 opened_key,
                 index,
                 name_buffer.as_mut_ptr(),
-                &mut name_length,
+                &raw mut name_length,
                 std::ptr::null_mut(),
-                &mut value_type,
-                data_buffer.as_mut_ptr() as *mut u8,
-                &mut data_length,
+                &raw mut value_type,
+                data_buffer.as_mut_ptr().cast(),
+                &raw mut data_length,
             ) as u32;
 
             if status == ERROR_NO_MORE_ITEMS {
@@ -63,7 +63,7 @@ fn read_values(key: HKEY, sub_key: &str) -> Vec<(String, String)> {
 
             if value_type == REG_SZ && name_length > 0 {
                 let name = String::from_utf16_lossy(&name_buffer[..name_length as usize]);
-                let data_char_count = data_length as usize / std::mem::size_of::<u16>();
+                let data_char_count = data_length as usize / size_of::<u16>();
                 let data = if data_char_count > 0 && data_buffer[data_char_count - 1] == 0 {
                     String::from_utf16_lossy(&data_buffer[..data_char_count - 1])
                 } else {
@@ -97,7 +97,7 @@ fn create_or_open_key(key: HKEY, sub_key: &str) -> Option<HKEY> {
             REG_OPTION_NON_VOLATILE,
             KEY_WRITE,
             std::ptr::null(),
-            &mut opened_key,
+            &raw mut opened_key,
             std::ptr::null_mut(),
         ) as u32
             != ERROR_SUCCESS
@@ -110,22 +110,18 @@ fn create_or_open_key(key: HKEY, sub_key: &str) -> Option<HKEY> {
 
 fn write_value(opened_key: HKEY, name: Option<&str>, data: &str) -> bool {
     let data_wide = encode_wide(data);
-    let name_wide;
-    let name_ptr = match name {
-        Some(name_string) => {
-            name_wide = encode_wide(name_string);
-            name_wide.as_ptr()
-        }
-        None => std::ptr::null(),
-    };
+    let name_wide = name.map(encode_wide);
+    let name_ptr = name_wide
+        .as_ref()
+        .map_or(std::ptr::null(), |wide| wide.as_ptr());
     unsafe {
         RegSetValueExW(
             opened_key,
             name_ptr,
             0,
             REG_SZ,
-            data_wide.as_ptr() as *const u8,
-            (data_wide.len() * std::mem::size_of::<u16>()) as u32,
+            data_wide.as_ptr().cast(),
+            (data_wide.len() * size_of::<u16>()) as u32,
         ) as u32
             == ERROR_SUCCESS
     }
