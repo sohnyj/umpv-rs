@@ -18,11 +18,12 @@ fn resolve_mpv_path() -> Option<PathBuf> {
         .and_then(|exe| exe.parent().map(|dir| dir.join("mpv.exe")))
 }
 
-pub(crate) fn launch_mpv() -> std::io::Result<()> {
+pub(crate) fn launch_mpv(idlescreen: &str) -> std::io::Result<()> {
     let mpv_path = resolve_mpv_path()
         .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "mpv.exe not found."))?;
     Command::new(&mpv_path)
         .arg(format!("--input-ipc-server={}", pipe::PIPE_PATH))
+        .arg(format!("--script-opts=osc-idlescreen={idlescreen}"))
         .creation_flags(CREATE_NEW_PROCESS_GROUP)
         .spawn()?;
     Ok(())
