@@ -3,13 +3,10 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
-      auto_tag:
-        description: "Read version from Cargo.toml"
+      append_hash:
+        description: "Append short commit hash to the tag (e.g. v0.n.n-b2298b8)"
         type: boolean
-        default: true
-      version:
-        description: "Manual version (e.g. v0.1.1). Used when auto_tag is off."
-        required: false
+        default: false
 
 permissions:
   contents: write
@@ -26,10 +23,11 @@ jobs:
       - name: Get version
         id: version
         run: |
-          if [ "${{ inputs.auto_tag }}" = "true" ]; then
-            echo "tag=v$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+          if [ "${{ inputs.append_hash }}" = "true" ]; then
+            echo "tag=v${version}-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
           else
-            echo "tag=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+            echo "tag=v${version}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Install Rust
