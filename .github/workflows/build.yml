@@ -36,12 +36,12 @@ jobs:
       - name: Compress
         if: github.event_name == 'workflow_dispatch'
         working-directory: target/x86_64-pc-windows-msvc/release
-        run: 7z a -mx=9 ${{ github.workspace }}/umpv-rust.7z umpv.exe
+        run: 7z a -mx=9 ${{ github.workspace }}/umpv-rs.7z umpv.exe
 
       - name: Upload artifact
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v7
         with:
           name: umpv
-          path: umpv-rust.7z
+          path: umpv-rs.7z
           retention-days: 7

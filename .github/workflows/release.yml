@@ -48,7 +48,7 @@ jobs:
 
       - name: Compress
         working-directory: target/x86_64-pc-windows-msvc/release
-        run: 7z a -mx=9 ${{ github.workspace }}/umpv-rust.7z umpv.exe
+        run: 7z a -mx=9 ${{ github.workspace }}/umpv-rs.7z umpv.exe
 
       - name: Remove existing release/tag if it already exists
         env:
@@ -83,7 +83,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${{ steps.version.outputs.tag }}" \
-            "${{ github.workspace }}/umpv-rust.7z" \
+            "${{ github.workspace }}/umpv-rs.7z" \
             --target "${{ github.sha }}" \
             --title "${{ steps.version.outputs.tag }}" \
             --notes-file RELEASE_NOTES.md
