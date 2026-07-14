@@ -78,7 +78,7 @@ fn read_values(key: HKEY, sub_key: &str) -> Vec<(String, String)> {
     results
 }
 
-fn read_assocs(key: HKEY, sub_key: &str) -> Vec<(String, String)> {
+fn read_associations(key: HKEY, sub_key: &str) -> Vec<(String, String)> {
     read_values(key, sub_key)
         .into_iter()
         .filter(|(name, _)| name.starts_with('.') && name.len() > 1)
@@ -136,13 +136,13 @@ fn set_value(key: HKEY, sub_key: &str, name: Option<&str>, data: &str) -> bool {
     success
 }
 
-fn set_assocs(exts: impl IntoIterator<Item = impl AsRef<str>>, prog_id: &str) -> usize {
+fn set_associations(extensions: impl IntoIterator<Item = impl AsRef<str>>, prog_id: &str) -> usize {
     let Some(opened_key) = create_or_open_key(HKEY_CURRENT_USER, SUBKEY_FILE_ASSOCIATIONS) else {
         return 0;
     };
     let mut count = 0;
-    for ext in exts {
-        if write_value(opened_key, Some(ext.as_ref()), prog_id) {
+    for extension in extensions {
+        if write_value(opened_key, Some(extension.as_ref()), prog_id) {
             count += 1;
         }
     }
@@ -156,8 +156,8 @@ fn delete_tree(key: HKEY, sub_key: &str) {
 }
 
 pub(crate) fn register(loadfile: Option<&str>, idlescreen: Option<&str>) {
-    let assocs = read_assocs(HKEY_CURRENT_USER, SUBKEY_FILE_ASSOCIATIONS);
-    if assocs.is_empty() {
+    let associations = read_associations(HKEY_CURRENT_USER, SUBKEY_FILE_ASSOCIATIONS);
+    if associations.is_empty() {
         error_exit("No mpv file associations found.\nRun 'mpv.exe --register' first.");
     }
 
@@ -208,7 +208,10 @@ pub(crate) fn register(loadfile: Option<&str>, idlescreen: Option<&str>) {
         error_exit("Failed to write umpv ProgID to registry.");
     }
 
-    let count = set_assocs(assocs.iter().map(|(ext, _)| ext), UMPV_PROG_ID);
+    let count = set_associations(
+        associations.iter().map(|(extension, _)| extension),
+        UMPV_PROG_ID,
+    );
     if count == 0 {
         error_exit("Failed to register any file associations.");
     }
@@ -223,19 +226,22 @@ pub(crate) fn register(loadfile: Option<&str>, idlescreen: Option<&str>) {
 }
 
 pub(crate) fn unregister() {
-    let assocs = read_assocs(HKEY_CURRENT_USER, SUBKEY_FILE_ASSOCIATIONS);
+    let associations = read_associations(HKEY_CURRENT_USER, SUBKEY_FILE_ASSOCIATIONS);
 
-    let umpv_assocs: Vec<_> = assocs
+    let umpv_associations: Vec<_> = associations
         .iter()
         .filter(|(_, data)| data == UMPV_PROG_ID)
         .collect();
 
-    if umpv_assocs.is_empty() {
+    if umpv_associations.is_empty() {
         show_message(Level::Info, "Nothing to unregister.");
         return;
     }
 
-    let count = set_assocs(umpv_assocs.iter().map(|(ext, _)| ext), MPV_PROG_ID);
+    let count = set_associations(
+        umpv_associations.iter().map(|(extension, _)| extension),
+        MPV_PROG_ID,
+    );
 
     delete_tree(HKEY_CURRENT_USER, SUBKEY_UMPV_PROG_ID);
 

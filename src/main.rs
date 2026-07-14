@@ -20,6 +20,7 @@ fn encode_wide(string: &str) -> Vec<u16> {
         .collect()
 }
 
+#[derive(Clone, Copy)]
 enum Level {
     Error,
     Info,
