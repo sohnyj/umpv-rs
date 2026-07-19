@@ -19,8 +19,6 @@ A single-instance mpv launcher for Windows, written in Rust. Based on the [umpv]
 
 Specify the extensions you want. Leave a category empty (`=`) to skip it.
 
-**umpv does not support system-wide associations.**
-
 ### 2. Add umpv to mpv's registered extensions
 
 Only processes extensions that were registered by mpv's `--register` (step 1).
@@ -30,10 +28,10 @@ Only processes extensions that were registered by mpv's `--register` (step 1).
 ```
 
 > [!NOTE]
-> umpv only supports per-user file associations (`HKEY_CURRENT_USER`). **Running as administrator is neither required nor supported, and umpv does not support system-wide associations.**
-> To set umpv as the default for each extension, go to Windows Settings > Apps > Default apps > mpv, and select umpv for the desired extensions.
+> umpv only supports per-user associations (`HKEY_CURRENT_USER`); running as administrator is neither required nor supported.
+> To set umpv as the default for each extension, go to Windows Settings > Apps > Default apps > mpv, and select umpv.
 
-`--loadfile=` is optional; if omitted, defaults to `replace`. `--idlescreen=` is optional; if omitted, defaults to `no`. Example:
+`--loadfile=` defaults to `replace`, `--idlescreen=` to `no`. Example:
 
 ```bat
 .\umpv.exe --register --loadfile=append+play --idlescreen=yes
@@ -49,7 +47,7 @@ Removes umpv file associations from the registry. Does not restore previous defa
 
 ## Loadfile modes
 
-The `--loadfile=<value>` option controls how files are added to the mpv playlist. The mode is specified at registration time and baked into the registered command line.
+The `--loadfile=<value>` option controls how files are added to the mpv playlist. Set at registration time.
 
 | Value | Description |
 |-------|-------------|
@@ -77,14 +75,14 @@ See the [mpv documentation](https://mpv.io/manual/master/#command-interface-[%3C
 
 ## Idlescreen
 
-The `--idlescreen=<value>` option controls whether mpv shows its logo and idle message while waiting for a file. The value is specified at registration time and baked into the registered command line.
+The `--idlescreen=<value>` option controls whether mpv shows its logo and idle message while waiting for a file. Set at registration time.
 
 | Value | Description |
 |-------|-------------|
 | `no` | Do not show the idle logo (default) |
 | `yes` | Show the idle logo |
 
-Setting `no` avoids a brief idle-logo flash when umpv launches a new mpv instance. Applied only on launch, not when sending files to a running instance. Sets the OSC script option [`idlescreen`](https://mpv.io/manual/master/#on-screen-controller-idlescreen) via `--script-opts=osc-idlescreen=`, so it requires mpv's built-in OSC (not `--no-osc`).
+Setting `no` avoids a brief idle-logo flash when launching a new instance. Applies only on launch, not when sending files to a running instance. Sets the OSC option [`idlescreen`](https://mpv.io/manual/master/#on-screen-controller-idlescreen) via `--script-opts=osc-idlescreen=`, so it requires mpv's built-in OSC.
 
 ## Cross-compiling
 
@@ -124,4 +122,4 @@ Output: `target/x86_64-pc-windows-msvc/release/umpv.exe`
 
 ## Acknowledgements
 
-`mpv-icon.ico` is property of the [mpv project](https://github.com/mpv-player/mpv).
+`umpv.ico` is a colorized version of the `video-clip` icon from Microsoft's [Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons) (MIT License).

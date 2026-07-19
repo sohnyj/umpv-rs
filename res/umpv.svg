@@ -1,0 +1,22 @@
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g transform="translate(-2.76 -2.76) scale(1.115)">
+<path d="M10.25 8C6.79822 8 4 10.7982 4 14.25V33.75C4 37.2018 6.79822 40 10.25 40H37.75C41.2018 40 44 37.2018 44 33.75V14.25C44 10.7982 41.2018 8 37.75 8H10.25Z" fill="url(#vc_body_radial)"/>
+<path d="M10.25 8C6.79822 8 4 10.7982 4 14.25V33.75C4 37.2018 6.79822 40 10.25 40H37.75C41.2018 40 44 37.2018 44 33.75V14.25C44 10.7982 41.2018 8 37.75 8H10.25Z" fill="url(#vc_body_shade)" fill-opacity="0.7"/>
+<path d="M18 17.9996C18 16.861 19.2188 16.1375 20.2183 16.6828L31.2176 22.6831C32.2598 23.2516 32.2598 24.7481 31.2176 25.3167L20.2183 31.3169C19.2188 31.8622 18 31.1387 18 30.0001V17.9996Z" fill="url(#vc_play)"/>
+</g>
+<defs>
+<radialGradient id="vc_body_radial" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(6 9) rotate(41) scale(52 52)">
+<stop stop-color="#F08AF4"/>
+<stop offset="0.35" stop-color="#9C6CFE"/>
+<stop offset="1" stop-color="#4E44DB"/>
+</radialGradient>
+<linearGradient id="vc_body_shade" x1="24" y1="40" x2="30" y2="20" gradientUnits="userSpaceOnUse">
+<stop stop-color="#312A9A"/>
+<stop offset="1" stop-color="#312A9A" stop-opacity="0"/>
+</linearGradient>
+<linearGradient id="vc_play" x1="25" y1="16.5" x2="25" y2="31.5" gradientUnits="userSpaceOnUse">
+<stop stop-color="#FEFEFF"/>
+<stop offset="1" stop-color="#CFC9FF"/>
+</linearGradient>
+</defs>
+</svg>
