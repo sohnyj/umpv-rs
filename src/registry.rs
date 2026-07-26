@@ -25,9 +25,16 @@ fn notify_shell_change() {
     }
 }
 
-fn read_values(root_key: HKEY, subkey: &str) -> Vec<(String, String)> {
+struct KeyGuard(HKEY);
+
+impl Drop for KeyGuard {
+    fn drop(&mut self) {
+        unsafe { RegCloseKey(self.0) };
+    }
+}
+
+fn open_key(root_key: HKEY, subkey: &str) -> Option<KeyGuard> {
     let subkey_wide = encode_wide(subkey);
-    let mut results = Vec::new();
     unsafe {
         let mut opened_key: HKEY = std::ptr::null_mut();
         if RegOpenKeyExW(
@@ -39,19 +46,29 @@ fn read_values(root_key: HKEY, subkey: &str) -> Vec<(String, String)> {
         ) as u32
             != ERROR_SUCCESS
         {
-            return results;
+            return None;
         }
+        Some(KeyGuard(opened_key))
+    }
+}
 
-        let mut index: u32 = 0;
-        loop {
-            let mut name_buffer = [0u16; 256];
-            let mut name_length = name_buffer.len() as u32;
-            let mut data_buffer = [0u16; 1024];
-            let mut data_length = size_of_val(&data_buffer) as u32;
-            let mut value_type: u32 = 0;
+fn read_values(root_key: HKEY, subkey: &str) -> Vec<(String, String)> {
+    let mut results = Vec::new();
+    let Some(opened_key) = open_key(root_key, subkey) else {
+        return results;
+    };
 
-            let status = RegEnumValueW(
-                opened_key,
+    let mut name_buffer = [0u16; 256];
+    let mut data_buffer = [0u16; 1024];
+    let mut index: u32 = 0;
+    loop {
+        let mut name_length = name_buffer.len() as u32;
+        let mut data_length = size_of_val(&data_buffer) as u32;
+        let mut value_type: u32 = 0;
+
+        let status = unsafe {
+            RegEnumValueW(
+                opened_key.0,
                 index,
                 name_buffer.as_mut_ptr(),
                 &raw mut name_length,
@@ -59,30 +76,22 @@ fn read_values(root_key: HKEY, subkey: &str) -> Vec<(String, String)> {
                 &raw mut value_type,
                 data_buffer.as_mut_ptr().cast(),
                 &raw mut data_length,
-            ) as u32;
+            )
+        } as u32;
 
-            if status == ERROR_NO_MORE_ITEMS {
-                break;
-            }
-            if status != ERROR_SUCCESS {
-                index += 1;
-                continue;
-            }
-
-            if value_type == REG_SZ && name_length > 0 {
-                let name = String::from_utf16_lossy(&name_buffer[..name_length as usize]);
-                let data_char_count = data_length as usize / size_of::<u16>();
-                let data = if data_char_count > 0 && data_buffer[data_char_count - 1] == 0 {
-                    String::from_utf16_lossy(&data_buffer[..data_char_count - 1])
-                } else {
-                    String::from_utf16_lossy(&data_buffer[..data_char_count])
-                };
-                results.push((name, data));
-            }
-            index += 1;
+        if status == ERROR_NO_MORE_ITEMS {
+            break;
         }
-        RegCloseKey(opened_key);
+        if status == ERROR_SUCCESS && value_type == REG_SZ && name_length > 0 {
+            let name = String::from_utf16_lossy(&name_buffer[..name_length as usize]);
+            let data_chars = &data_buffer[..data_length as usize / size_of::<u16>()];
+            let data =
+                String::from_utf16_lossy(data_chars.strip_suffix(&[0]).unwrap_or(data_chars));
+            results.push((name, data));
+        }
+        index += 1;
     }
+
     results
 }
 
@@ -93,7 +102,7 @@ fn read_associations(root_key: HKEY, subkey: &str) -> Vec<(String, String)> {
         .collect()
 }
 
-fn create_or_open_key(root_key: HKEY, subkey: &str) -> Option<HKEY> {
+fn create_or_open_key(root_key: HKEY, subkey: &str) -> Option<KeyGuard> {
     let subkey_wide = encode_wide(subkey);
     unsafe {
         let mut opened_key: HKEY = std::ptr::null_mut();
@@ -112,7 +121,7 @@ fn create_or_open_key(root_key: HKEY, subkey: &str) -> Option<HKEY> {
         {
             return None;
         }
-        Some(opened_key)
+        Some(KeyGuard(opened_key))
     }
 }
 
@@ -144,9 +153,7 @@ fn create_key_and_write_value(
     let Some(opened_key) = create_or_open_key(root_key, subkey) else {
         return false;
     };
-    let succeeded = write_value(opened_key, name, data);
-    unsafe { RegCloseKey(opened_key) };
-    succeeded
+    write_value(opened_key.0, name, data)
 }
 
 fn set_associations(extensions: impl IntoIterator<Item = impl AsRef<str>>, prog_id: &str) -> usize {
@@ -155,12 +162,19 @@ fn set_associations(extensions: impl IntoIterator<Item = impl AsRef<str>>, prog_
     };
     let mut count = 0;
     for extension in extensions {
-        if write_value(opened_key, Some(extension.as_ref()), prog_id) {
+        if write_value(opened_key.0, Some(extension.as_ref()), prog_id) {
             count += 1;
         }
     }
-    unsafe { RegCloseKey(opened_key) };
     count
+}
+
+fn warn_deprecated_loadfile(loadfile: &str, replacement: &'static str) -> &'static str {
+    show_message(
+        MessageLevel::Warning,
+        &format!("'{loadfile}' is deprecated since mpv 0.42.\nUsing '{replacement}' instead."),
+    );
+    replacement
 }
 
 fn delete_tree(root_key: HKEY, subkey: &str) {
@@ -184,28 +198,11 @@ pub(crate) fn register(loadfile: Option<&str>, idlescreen: Option<&str>) {
         ));
     }
 
-    if !matches!(
-        loadfile,
-        "replace"
-            | "append"
-            | "append+play"
-            | "append-play"
-            | "insert-next"
-            | "insert-next+play"
-            | "insert-next-play"
-    ) {
-        error_exit(&format!("Unsupported loadfile flag: {loadfile}"));
-    }
-
-    let loadfile = if matches!(loadfile, "append-play" | "insert-next-play") {
-        let replacement = loadfile.replace("-play", "+play");
-        show_message(
-            MessageLevel::Warning,
-            &format!("'{loadfile}' is deprecated since mpv 0.42.\nUsing '{replacement}' instead."),
-        );
-        replacement
-    } else {
-        loadfile.to_string()
+    let loadfile = match loadfile {
+        "replace" | "append" | "append+play" | "insert-next" | "insert-next+play" => loadfile,
+        "append-play" => warn_deprecated_loadfile(loadfile, "append+play"),
+        "insert-next-play" => warn_deprecated_loadfile(loadfile, "insert-next+play"),
+        _ => error_exit(&format!("Unsupported loadfile flag: {loadfile}")),
     };
 
     let command = format!(

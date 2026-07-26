@@ -11,15 +11,16 @@ use windows_sys::Win32::System::Pipes::{GetNamedPipeServerProcessId, WaitNamedPi
 use crate::encode_wide;
 
 pub(crate) enum Error {
-    ConnectFailed(u32),
+    NotRunning,
+    ConnectFailed,
     WriteFailed,
 }
 
 pub(crate) const PIPE_PATH: &str = r"\\.\pipe\umpv";
 
-fn open_pipe(pipe_path_wide: &[u16]) -> HANDLE {
+fn open_pipe(pipe_path_wide: &[u16]) -> Result<HANDLE, u32> {
     unsafe {
-        CreateFileW(
+        let handle = CreateFileW(
             pipe_path_wide.as_ptr(),
             GENERIC_WRITE,
             0,
@@ -27,7 +28,12 @@ fn open_pipe(pipe_path_wide: &[u16]) -> HANDLE {
             OPEN_EXISTING,
             FILE_ATTRIBUTE_NORMAL | SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION,
             std::ptr::null_mut(),
-        )
+        );
+        if handle != INVALID_HANDLE_VALUE {
+            Ok(handle)
+        } else {
+            Err(GetLastError())
+        }
     }
 }
 
@@ -45,27 +51,22 @@ fn connect_pipe(retry: bool) -> Result<HANDLE, u32> {
             std::thread::sleep(std::time::Duration::from_millis(RETRY_INTERVAL_MS));
         }
 
-        let handle = open_pipe(&pipe_path_wide);
-        if handle != INVALID_HANDLE_VALUE {
-            return Ok(handle);
-        }
-
-        unsafe {
-            last_error = GetLastError();
-            match last_error {
-                ERROR_PIPE_BUSY => {
-                    if WaitNamedPipeW(pipe_path_wide.as_ptr(), PIPE_BUSY_TIMEOUT_MS) != FALSE {
-                        let handle = open_pipe(&pipe_path_wide);
-                        if handle != INVALID_HANDLE_VALUE {
-                            return Ok(handle);
-                        }
-                        last_error = GetLastError();
+        last_error = match open_pipe(&pipe_path_wide) {
+            Ok(handle) => return Ok(handle),
+            Err(ERROR_PIPE_BUSY) => {
+                if unsafe { WaitNamedPipeW(pipe_path_wide.as_ptr(), PIPE_BUSY_TIMEOUT_MS) } == FALSE
+                {
+                    ERROR_PIPE_BUSY
+                } else {
+                    match open_pipe(&pipe_path_wide) {
+                        Ok(handle) => return Ok(handle),
+                        Err(error) => error,
                     }
                 }
-                ERROR_FILE_NOT_FOUND => {}
-                error => return Err(error),
             }
-        }
+            Err(ERROR_FILE_NOT_FOUND) => ERROR_FILE_NOT_FOUND,
+            Err(error) => return Err(error),
+        };
     }
 
     Err(last_error)
@@ -115,7 +116,10 @@ fn write_command(handle: HANDLE, file: &str, loadfile: &str) -> bool {
 }
 
 pub(crate) fn send_file(file: &str, loadfile: &str, retry: bool) -> Result<u32, Error> {
-    let handle = connect_pipe(retry).map_err(Error::ConnectFailed)?;
+    let handle = connect_pipe(retry).map_err(|error| match error {
+        ERROR_FILE_NOT_FOUND => Error::NotRunning,
+        _ => Error::ConnectFailed,
+    })?;
     let pid = server_pid(handle);
     let succeeded = write_command(handle, file, loadfile);
     unsafe { CloseHandle(handle) };
