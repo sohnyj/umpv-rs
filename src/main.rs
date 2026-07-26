@@ -7,8 +7,9 @@ use std::process;
 use windows_sys::Win32::Foundation::ERROR_FILE_NOT_FOUND;
 use windows_sys::Win32::UI::WindowsAndMessaging::MessageBoxW;
 
-use pipe::{MutexError, SendError};
+use pipe::SendError;
 
+mod lock;
 mod mpv;
 mod pipe;
 mod registry;
@@ -100,12 +101,12 @@ fn main() {
     let loadfile = loadfile.unwrap_or(DEFAULT_LOADFILE);
     let idlescreen = idlescreen.unwrap_or(DEFAULT_IDLESCREEN);
 
-    let _mutex_guard = match pipe::acquire_mutex() {
+    let _lock_guard = match lock::acquire() {
         Ok(guard) => guard,
-        Err(MutexError::Timeout) => {
+        Err(lock::Error::Timeout) => {
             error_exit("Failed to acquire lock: an mpv instance is not responding.")
         }
-        Err(MutexError::CreateFailed) => error_exit("Failed to create umpv lock."),
+        Err(lock::Error::CreateFailed) => error_exit("Failed to create umpv lock."),
     };
 
     match pipe::send_file(&file, loadfile, false) {

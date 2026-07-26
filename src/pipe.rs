@@ -1,20 +1,14 @@
 use windows_sys::Win32::Foundation::{
     CloseHandle, ERROR_FILE_NOT_FOUND, ERROR_PIPE_BUSY, FALSE, GENERIC_WRITE, GetLastError, HANDLE,
-    INVALID_HANDLE_VALUE, WAIT_ABANDONED, WAIT_OBJECT_0,
+    INVALID_HANDLE_VALUE,
 };
 use windows_sys::Win32::Storage::FileSystem::{
     CreateFileW, FILE_ATTRIBUTE_NORMAL, OPEN_EXISTING, SECURITY_IDENTIFICATION,
     SECURITY_SQOS_PRESENT, WriteFile,
 };
 use windows_sys::Win32::System::Pipes::{GetNamedPipeServerProcessId, WaitNamedPipeW};
-use windows_sys::Win32::System::Threading::{CreateMutexW, ReleaseMutex, WaitForSingleObject};
 
 use crate::encode_wide;
-
-pub(crate) enum MutexError {
-    CreateFailed,
-    Timeout,
-}
 
 pub(crate) enum SendError {
     ConnectFailed(u32),
@@ -22,36 +16,6 @@ pub(crate) enum SendError {
 }
 
 pub(crate) const PIPE_PATH: &str = r"\\.\pipe\umpv";
-
-pub(crate) struct MutexGuard(HANDLE);
-
-impl Drop for MutexGuard {
-    fn drop(&mut self) {
-        unsafe {
-            ReleaseMutex(self.0);
-            CloseHandle(self.0);
-        }
-    }
-}
-
-const MUTEX_NAME: &str = "umpv_mutex";
-const MUTEX_TIMEOUT_MS: u32 = 10_000;
-
-pub(crate) fn acquire_mutex() -> Result<MutexGuard, MutexError> {
-    let mutex_name_wide = encode_wide(MUTEX_NAME);
-    unsafe {
-        let handle = CreateMutexW(std::ptr::null(), FALSE, mutex_name_wide.as_ptr());
-        if handle.is_null() {
-            return Err(MutexError::CreateFailed);
-        }
-        let wait_result = WaitForSingleObject(handle, MUTEX_TIMEOUT_MS);
-        if wait_result != WAIT_OBJECT_0 && wait_result != WAIT_ABANDONED {
-            CloseHandle(handle);
-            return Err(MutexError::Timeout);
-        }
-        Ok(MutexGuard(handle))
-    }
-}
 
 fn open_pipe(pipe_path_wide: &[u16]) -> HANDLE {
     unsafe {
