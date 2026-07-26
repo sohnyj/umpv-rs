@@ -12,14 +12,14 @@ use windows_sys::core::BOOL;
 
 use crate::pipe;
 
-fn resolve_mpv_path() -> Option<PathBuf> {
+fn resolve_path() -> Option<PathBuf> {
     std::env::current_exe()
         .ok()
         .and_then(|exe| exe.parent().map(|dir| dir.join("mpv.exe")))
 }
 
-pub(crate) fn launch_mpv(idlescreen: &str) -> std::io::Result<()> {
-    let mpv_path = resolve_mpv_path()
+pub(crate) fn launch(idlescreen: &str) -> std::io::Result<()> {
+    let mpv_path = resolve_path()
         .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "mpv.exe not found."))?;
     Command::new(&mpv_path)
         .arg(format!("--input-ipc-server={}", pipe::PIPE_PATH))
@@ -52,7 +52,7 @@ unsafe extern "system" fn activate_window_if_mpv(hwnd: HWND, lparam: LPARAM) -> 
     }
 }
 
-pub(crate) fn activate_mpv_window(pid: u32) {
+pub(crate) fn activate_window(pid: u32) {
     if pid == 0 {
         return;
     }

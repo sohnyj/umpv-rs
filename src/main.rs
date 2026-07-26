@@ -21,17 +21,17 @@ fn encode_wide(string: &str) -> Vec<u16> {
 }
 
 #[derive(Clone, Copy)]
-enum Level {
+enum MessageLevel {
     Error,
     Info,
     Warning,
 }
 
-fn show_message(level: Level, text: &str) {
+fn show_message(level: MessageLevel, text: &str) {
     let prefix = match level {
-        Level::Error => "Error",
-        Level::Info => "Info",
-        Level::Warning => "Warning",
+        MessageLevel::Error => "Error",
+        MessageLevel::Info => "Info",
+        MessageLevel::Warning => "Warning",
     };
     let text_wide = encode_wide(&format!("{prefix}: {text}"));
     let caption_wide = encode_wide("umpv");
@@ -46,11 +46,11 @@ fn show_message(level: Level, text: &str) {
 }
 
 fn error_exit(text: &str) -> ! {
-    show_message(Level::Error, text);
+    show_message(MessageLevel::Error, text);
     process::exit(1);
 }
 
-fn parse_option<'a>(args: &'a [String], prefix: &str) -> Option<&'a str> {
+fn find_option_value<'a>(args: &'a [String], prefix: &str) -> Option<&'a str> {
     args.iter().find_map(|arg| arg.strip_prefix(prefix))
 }
 
@@ -61,7 +61,7 @@ fn resolve_file_path(arg: &str) -> String {
     }
 }
 
-fn find_file(args: &[String]) -> Option<String> {
+fn find_file_argument(args: &[String]) -> Option<String> {
     args.iter()
         .find(|arg| !arg.starts_with("--"))
         .map(|arg| resolve_file_path(arg))
@@ -78,8 +78,8 @@ fn main() {
     };
 
     let args: Vec<String> = env::args().skip(1).collect();
-    let loadfile = parse_option(&args, "--loadfile=");
-    let idlescreen = parse_option(&args, "--idlescreen=");
+    let loadfile = find_option_value(&args, "--loadfile=");
+    let idlescreen = find_option_value(&args, "--idlescreen=");
 
     match args.first().map(String::as_str) {
         Some("--register") => {
@@ -93,7 +93,7 @@ fn main() {
         _ => {}
     }
 
-    let Some(file) = find_file(&args) else {
+    let Some(file) = find_file_argument(&args) else {
         return;
     };
 
@@ -105,13 +105,13 @@ fn main() {
         Err(MutexError::Timeout) => {
             error_exit("Failed to acquire lock: an mpv instance is not responding.")
         }
-        Err(MutexError::Create) => error_exit("Failed to create umpv lock."),
+        Err(MutexError::CreateFailed) => error_exit("Failed to create umpv lock."),
     };
 
     match pipe::send_file(&file, loadfile, false) {
-        Ok(pid) => mpv::activate_mpv_window(pid),
-        Err(SendError::Connect(ERROR_FILE_NOT_FOUND)) => {
-            if let Err(err) = mpv::launch_mpv(idlescreen) {
+        Ok(pid) => mpv::activate_window(pid),
+        Err(SendError::ConnectFailed(ERROR_FILE_NOT_FOUND)) => {
+            if let Err(err) = mpv::launch(idlescreen) {
                 error_exit(&format!("Failed to launch mpv: {err}"));
             }
             if pipe::send_file(&file, loadfile, true).is_err() {

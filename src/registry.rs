@@ -5,7 +5,9 @@ use windows_sys::Win32::System::Registry::{
 };
 use windows_sys::Win32::UI::Shell::{SHCNE_ASSOCCHANGED, SHCNF_IDLIST, SHChangeNotify};
 
-use crate::{DEFAULT_IDLESCREEN, DEFAULT_LOADFILE, Level, encode_wide, error_exit, show_message};
+use crate::{
+    DEFAULT_IDLESCREEN, DEFAULT_LOADFILE, MessageLevel, encode_wide, error_exit, show_message,
+};
 
 const SUBKEY_FILE_ASSOCIATIONS: &str = r"Software\Clients\Media\mpv\Capabilities\FileAssociations";
 const SUBKEY_UMPV_PROG_ID: &str = r"Software\Classes\io.mpv.umpv";
@@ -23,12 +25,18 @@ fn notify_shell_change() {
     }
 }
 
-fn read_values(key: HKEY, sub_key: &str) -> Vec<(String, String)> {
-    let sub_key_wide = encode_wide(sub_key);
+fn read_values(root_key: HKEY, subkey: &str) -> Vec<(String, String)> {
+    let subkey_wide = encode_wide(subkey);
     let mut results = Vec::new();
     unsafe {
         let mut opened_key: HKEY = std::ptr::null_mut();
-        if RegOpenKeyExW(key, sub_key_wide.as_ptr(), 0, KEY_READ, &raw mut opened_key) as u32
+        if RegOpenKeyExW(
+            root_key,
+            subkey_wide.as_ptr(),
+            0,
+            KEY_READ,
+            &raw mut opened_key,
+        ) as u32
             != ERROR_SUCCESS
         {
             return results;
@@ -78,20 +86,20 @@ fn read_values(key: HKEY, sub_key: &str) -> Vec<(String, String)> {
     results
 }
 
-fn read_associations(key: HKEY, sub_key: &str) -> Vec<(String, String)> {
-    read_values(key, sub_key)
+fn read_associations(root_key: HKEY, subkey: &str) -> Vec<(String, String)> {
+    read_values(root_key, subkey)
         .into_iter()
         .filter(|(name, _)| name.starts_with('.') && name.len() > 1)
         .collect()
 }
 
-fn create_or_open_key(key: HKEY, sub_key: &str) -> Option<HKEY> {
-    let sub_key_wide = encode_wide(sub_key);
+fn create_or_open_key(root_key: HKEY, subkey: &str) -> Option<HKEY> {
+    let subkey_wide = encode_wide(subkey);
     unsafe {
         let mut opened_key: HKEY = std::ptr::null_mut();
         if RegCreateKeyExW(
-            key,
-            sub_key_wide.as_ptr(),
+            root_key,
+            subkey_wide.as_ptr(),
             0,
             std::ptr::null(),
             REG_OPTION_NON_VOLATILE,
@@ -127,13 +135,18 @@ fn write_value(opened_key: HKEY, name: Option<&str>, data: &str) -> bool {
     }
 }
 
-fn set_value(key: HKEY, sub_key: &str, name: Option<&str>, data: &str) -> bool {
-    let Some(opened_key) = create_or_open_key(key, sub_key) else {
+fn create_key_and_write_value(
+    root_key: HKEY,
+    subkey: &str,
+    name: Option<&str>,
+    data: &str,
+) -> bool {
+    let Some(opened_key) = create_or_open_key(root_key, subkey) else {
         return false;
     };
-    let success = write_value(opened_key, name, data);
+    let succeeded = write_value(opened_key, name, data);
     unsafe { RegCloseKey(opened_key) };
-    success
+    succeeded
 }
 
 fn set_associations(extensions: impl IntoIterator<Item = impl AsRef<str>>, prog_id: &str) -> usize {
@@ -150,9 +163,9 @@ fn set_associations(extensions: impl IntoIterator<Item = impl AsRef<str>>, prog_
     count
 }
 
-fn delete_tree(key: HKEY, sub_key: &str) {
-    let sub_key_wide = encode_wide(sub_key);
-    unsafe { RegDeleteTreeW(key, sub_key_wide.as_ptr()) };
+fn delete_tree(root_key: HKEY, subkey: &str) {
+    let subkey_wide = encode_wide(subkey);
+    unsafe { RegDeleteTreeW(root_key, subkey_wide.as_ptr()) };
 }
 
 pub(crate) fn register(loadfile: Option<&str>, idlescreen: Option<&str>) {
@@ -187,7 +200,7 @@ pub(crate) fn register(loadfile: Option<&str>, idlescreen: Option<&str>) {
     let loadfile = if matches!(loadfile, "append-play" | "insert-next-play") {
         let replacement = loadfile.replace("-play", "+play");
         show_message(
-            Level::Warning,
+            MessageLevel::Warning,
             &format!("'{loadfile}' is deprecated since mpv 0.42.\nUsing '{replacement}' instead."),
         );
         replacement
@@ -201,9 +214,9 @@ pub(crate) fn register(loadfile: Option<&str>, idlescreen: Option<&str>) {
         loadfile,
         idlescreen
     );
-    let command_key = format!("{SUBKEY_UMPV_PROG_ID}\\shell\\open\\command");
-    if !set_value(HKEY_CURRENT_USER, SUBKEY_UMPV_PROG_ID, None, "")
-        || !set_value(HKEY_CURRENT_USER, &command_key, None, &command)
+    let command_subkey = format!("{SUBKEY_UMPV_PROG_ID}\\shell\\open\\command");
+    if !create_key_and_write_value(HKEY_CURRENT_USER, SUBKEY_UMPV_PROG_ID, None, "")
+        || !create_key_and_write_value(HKEY_CURRENT_USER, &command_subkey, None, &command)
     {
         error_exit("Failed to write umpv ProgID to registry.");
     }
@@ -218,7 +231,7 @@ pub(crate) fn register(loadfile: Option<&str>, idlescreen: Option<&str>) {
 
     notify_shell_change();
     show_message(
-        Level::Info,
+        MessageLevel::Info,
         &format!(
             "umpv registered for {count} file extension(s).\nloadfile: {loadfile}\nidlescreen: {idlescreen}"
         ),
@@ -234,7 +247,7 @@ pub(crate) fn unregister() {
         .collect();
 
     if umpv_associations.is_empty() {
-        show_message(Level::Info, "Nothing to unregister.");
+        show_message(MessageLevel::Info, "Nothing to unregister.");
         return;
     }
 
@@ -247,7 +260,7 @@ pub(crate) fn unregister() {
 
     notify_shell_change();
     show_message(
-        Level::Info,
+        MessageLevel::Info,
         &format!("umpv unregistered for {count} file extension(s)."),
     );
 }

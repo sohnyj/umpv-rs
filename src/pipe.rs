@@ -12,13 +12,13 @@ use windows_sys::Win32::System::Threading::{CreateMutexW, ReleaseMutex, WaitForS
 use crate::encode_wide;
 
 pub(crate) enum MutexError {
-    Create,
+    CreateFailed,
     Timeout,
 }
 
 pub(crate) enum SendError {
-    Connect(u32),
-    Write,
+    ConnectFailed(u32),
+    WriteFailed,
 }
 
 pub(crate) const PIPE_PATH: &str = r"\\.\pipe\umpv";
@@ -42,7 +42,7 @@ pub(crate) fn acquire_mutex() -> Result<MutexGuard, MutexError> {
     unsafe {
         let handle = CreateMutexW(std::ptr::null(), FALSE, mutex_name_wide.as_ptr());
         if handle.is_null() {
-            return Err(MutexError::Create);
+            return Err(MutexError::CreateFailed);
         }
         let wait_result = WaitForSingleObject(handle, MUTEX_TIMEOUT_MS);
         if wait_result != WAIT_OBJECT_0 && wait_result != WAIT_ABANDONED {
@@ -117,7 +117,7 @@ fn write_bytes(handle: HANDLE, data: &[u8]) -> bool {
     let mut offset = 0;
     while offset < data.len() {
         let mut bytes_written: u32 = 0;
-        let ok = unsafe {
+        let succeeded = unsafe {
             WriteFile(
                 handle,
                 data[offset..].as_ptr(),
@@ -126,7 +126,7 @@ fn write_bytes(handle: HANDLE, data: &[u8]) -> bool {
                 std::ptr::null_mut(),
             )
         };
-        if ok == FALSE || bytes_written == 0 {
+        if succeeded == FALSE || bytes_written == 0 {
             return false;
         }
         offset += bytes_written as usize;
@@ -151,9 +151,13 @@ fn write_command(handle: HANDLE, file: &str, loadfile: &str) -> bool {
 }
 
 pub(crate) fn send_file(file: &str, loadfile: &str, retry: bool) -> Result<u32, SendError> {
-    let handle = connect_pipe(retry).map_err(SendError::Connect)?;
+    let handle = connect_pipe(retry).map_err(SendError::ConnectFailed)?;
     let pid = server_pid(handle);
-    let ok = write_command(handle, file, loadfile);
+    let succeeded = write_command(handle, file, loadfile);
     unsafe { CloseHandle(handle) };
-    if ok { Ok(pid) } else { Err(SendError::Write) }
+    if succeeded {
+        Ok(pid)
+    } else {
+        Err(SendError::WriteFailed)
+    }
 }
