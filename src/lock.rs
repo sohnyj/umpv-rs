@@ -19,7 +19,7 @@ impl Drop for Guard {
     }
 }
 
-const MUTEX_NAME: &str = "umpv_mutex";
+const MUTEX_NAME: &str = "umpv_lock";
 const ACQUIRE_TIMEOUT_MS: u32 = 10_000;
 
 pub(crate) fn acquire() -> Result<Guard, Error> {

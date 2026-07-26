@@ -7,8 +7,6 @@ use std::process;
 use windows_sys::Win32::Foundation::ERROR_FILE_NOT_FOUND;
 use windows_sys::Win32::UI::WindowsAndMessaging::MessageBoxW;
 
-use pipe::SendError;
-
 mod lock;
 mod mpv;
 mod pipe;
@@ -111,7 +109,7 @@ fn main() {
 
     match pipe::send_file(&file, loadfile, false) {
         Ok(pid) => mpv::activate_window(pid),
-        Err(SendError::ConnectFailed(ERROR_FILE_NOT_FOUND)) => {
+        Err(pipe::Error::ConnectFailed(ERROR_FILE_NOT_FOUND)) => {
             if let Err(err) = mpv::launch(idlescreen) {
                 error_exit(&format!("Failed to launch mpv: {err}"));
             }

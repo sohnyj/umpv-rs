@@ -10,7 +10,7 @@ use windows_sys::Win32::System::Pipes::{GetNamedPipeServerProcessId, WaitNamedPi
 
 use crate::encode_wide;
 
-pub(crate) enum SendError {
+pub(crate) enum Error {
     ConnectFailed(u32),
     WriteFailed,
 }
@@ -114,14 +114,14 @@ fn write_command(handle: HANDLE, file: &str, loadfile: &str) -> bool {
     write_bytes(handle, buffer.as_bytes())
 }
 
-pub(crate) fn send_file(file: &str, loadfile: &str, retry: bool) -> Result<u32, SendError> {
-    let handle = connect_pipe(retry).map_err(SendError::ConnectFailed)?;
+pub(crate) fn send_file(file: &str, loadfile: &str, retry: bool) -> Result<u32, Error> {
+    let handle = connect_pipe(retry).map_err(Error::ConnectFailed)?;
     let pid = server_pid(handle);
     let succeeded = write_command(handle, file, loadfile);
     unsafe { CloseHandle(handle) };
     if succeeded {
         Ok(pid)
     } else {
-        Err(SendError::WriteFailed)
+        Err(Error::WriteFailed)
     }
 }
