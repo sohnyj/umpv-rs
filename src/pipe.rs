@@ -1,6 +1,6 @@
 use windows_sys::Win32::Foundation::{
-    CloseHandle, ERROR_FILE_NOT_FOUND, ERROR_PIPE_BUSY, FALSE, GENERIC_WRITE, GetLastError, HANDLE,
-    INVALID_HANDLE_VALUE,
+    CloseHandle, ERROR_FILE_NOT_FOUND, ERROR_PIPE_BUSY, ERROR_SUCCESS, FALSE, GENERIC_WRITE,
+    GetLastError, HANDLE, INVALID_HANDLE_VALUE,
 };
 use windows_sys::Win32::Storage::FileSystem::{
     CreateFileW, FILE_ATTRIBUTE_NORMAL, OPEN_EXISTING, SECURITY_IDENTIFICATION,
@@ -38,7 +38,7 @@ const RETRY_MAX_ATTEMPTS: u32 = 50;
 fn connect_pipe(retry: bool) -> Result<HANDLE, u32> {
     let pipe_path_wide = encode_wide(PIPE_PATH);
     let max_attempts = if retry { RETRY_MAX_ATTEMPTS } else { 1 };
-    let mut last_error = ERROR_FILE_NOT_FOUND;
+    let mut last_error = ERROR_SUCCESS;
 
     for attempt in 0..max_attempts {
         if attempt > 0 {

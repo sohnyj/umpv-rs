@@ -64,6 +64,9 @@ The following flags (deprecated since mpv 0.42) are also accepted:
 | `append-play` | Equivalent to `append+play` |
 | `insert-next-play` | Equivalent to `insert-next+play` |
 
+> [!NOTE]
+> Deprecated flags are rewritten to their `+play` form at registration time, not when a file is opened. Older umpv versions stored them as given, so if you registered a deprecated flag with one of those versions, run `.\umpv.exe --register` again to rewrite the stored value.
+
 The following flags are not supported:
 
 | Value | Description |

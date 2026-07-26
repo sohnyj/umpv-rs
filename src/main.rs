@@ -53,6 +53,19 @@ fn find_option_value<'a>(args: &'a [String], prefix: &str) -> Option<&'a str> {
     args.iter().find_map(|arg| arg.strip_prefix(prefix))
 }
 
+enum Command {
+    Register,
+    Unregister,
+}
+
+fn find_command(args: &[String]) -> Option<Command> {
+    args.iter().find_map(|arg| match arg.as_str() {
+        "--register" => Some(Command::Register),
+        "--unregister" => Some(Command::Unregister),
+        _ => None,
+    })
+}
+
 fn resolve_file_path(arg: &str) -> String {
     match std::path::absolute(arg) {
         Ok(path) => path.to_string_lossy().into_owned(),
@@ -62,7 +75,7 @@ fn resolve_file_path(arg: &str) -> String {
 
 fn find_file_argument(args: &[String]) -> Option<String> {
     args.iter()
-        .find(|arg| !arg.starts_with("--"))
+        .find(|arg| !arg.is_empty() && !arg.starts_with("--"))
         .map(|arg| resolve_file_path(arg))
 }
 
@@ -80,16 +93,16 @@ fn main() {
     let loadfile = find_option_value(&args, "--loadfile=");
     let idlescreen = find_option_value(&args, "--idlescreen=");
 
-    match args.first().map(String::as_str) {
-        Some("--register") => {
+    match find_command(&args) {
+        Some(Command::Register) => {
             registry::register(loadfile, idlescreen);
             return;
         }
-        Some("--unregister") => {
+        Some(Command::Unregister) => {
             registry::unregister();
             return;
         }
-        _ => {}
+        None => {}
     }
 
     let Some(file) = find_file_argument(&args) else {
@@ -117,6 +130,7 @@ fn main() {
                 error_exit("Failed to send the file to mpv.");
             }
         }
-        Err(_) => error_exit("Failed to connect to mpv."),
+        Err(pipe::Error::ConnectFailed(_)) => error_exit("Failed to connect to mpv."),
+        Err(pipe::Error::WriteFailed) => error_exit("Failed to send the file to mpv."),
     }
 }
