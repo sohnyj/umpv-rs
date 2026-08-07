@@ -1,13 +1,7 @@
-use windows_sys::Win32::Foundation::{ERROR_NO_MORE_ITEMS, ERROR_SUCCESS};
-use windows_sys::Win32::System::Registry::{
-    HKEY, HKEY_CURRENT_USER, KEY_READ, KEY_WRITE, REG_OPTION_NON_VOLATILE, REG_SZ, RegCloseKey,
-    RegCreateKeyExW, RegDeleteTreeW, RegEnumValueW, RegOpenKeyExW, RegSetValueExW,
-};
+use windows_registry::{CURRENT_USER, Type};
 use windows_sys::Win32::UI::Shell::{SHCNE_ASSOCCHANGED, SHCNF_IDLIST, SHChangeNotify};
 
-use crate::{
-    DEFAULT_IDLESCREEN, DEFAULT_LOADFILE, MessageLevel, encode_wide, error_exit, show_message,
-};
+use crate::{DEFAULT_IDLESCREEN, DEFAULT_LOADFILE, MessageLevel, error_exit, show_message};
 
 const SUBKEY_FILE_ASSOCIATIONS: &str = r"Software\Clients\Media\mpv\Capabilities\FileAssociations";
 const SUBKEY_UMPV_PROG_ID: &str = r"Software\Classes\io.mpv.umpv";
@@ -25,144 +19,42 @@ fn notify_shell_change() {
     }
 }
 
-struct KeyGuard(HKEY);
-
-impl Drop for KeyGuard {
-    fn drop(&mut self) {
-        unsafe { RegCloseKey(self.0) };
-    }
-}
-
-fn open_key(root_key: HKEY, subkey: &str) -> Option<KeyGuard> {
-    let subkey_wide = encode_wide(subkey);
-    unsafe {
-        let mut opened_key: HKEY = std::ptr::null_mut();
-        if RegOpenKeyExW(
-            root_key,
-            subkey_wide.as_ptr(),
-            0,
-            KEY_READ,
-            &raw mut opened_key,
-        ) as u32
-            != ERROR_SUCCESS
-        {
-            return None;
-        }
-        Some(KeyGuard(opened_key))
-    }
-}
-
-fn read_values(root_key: HKEY, subkey: &str) -> Vec<(String, String)> {
-    let mut results = Vec::new();
-    let Some(opened_key) = open_key(root_key, subkey) else {
-        return results;
+/// mpv records each association as a string value named after the extension.
+fn read_associations() -> Vec<(String, String)> {
+    // The iterator borrows the key, so the key is bound before the walk.
+    let Ok(key) = CURRENT_USER.open(SUBKEY_FILE_ASSOCIATIONS) else {
+        return Vec::new();
     };
-
-    let mut name_buffer = [0u16; 256];
-    let mut data_buffer = [0u16; 1024];
-    let mut index: u32 = 0;
-    loop {
-        let mut name_length = name_buffer.len() as u32;
-        let mut data_length = size_of_val(&data_buffer) as u32;
-        let mut value_type: u32 = 0;
-
-        let status = unsafe {
-            RegEnumValueW(
-                opened_key.0,
-                index,
-                name_buffer.as_mut_ptr(),
-                &raw mut name_length,
-                std::ptr::null_mut(),
-                &raw mut value_type,
-                data_buffer.as_mut_ptr().cast(),
-                &raw mut data_length,
-            )
-        } as u32;
-
-        if status == ERROR_NO_MORE_ITEMS {
-            break;
-        }
-        if status == ERROR_SUCCESS && value_type == REG_SZ && name_length > 0 {
-            let name = String::from_utf16_lossy(&name_buffer[..name_length as usize]);
-            let data_chars = &data_buffer[..data_length as usize / size_of::<u16>()];
-            let data =
-                String::from_utf16_lossy(data_chars.strip_suffix(&[0]).unwrap_or(data_chars));
-            results.push((name, data));
-        }
-        index += 1;
-    }
-
-    results
-}
-
-fn read_associations(root_key: HKEY, subkey: &str) -> Vec<(String, String)> {
-    read_values(root_key, subkey)
-        .into_iter()
+    let Ok(values) = key.values() else {
+        return Vec::new();
+    };
+    values
         .filter(|(name, _)| name.starts_with('.') && name.len() > 1)
+        .filter_map(|(name, value)| match value.ty() {
+            // REG_SZ only, as String::try_from would also accept REG_EXPAND_SZ.
+            Type::String => Some((name, String::try_from(value).ok()?)),
+            _ => None,
+        })
         .collect()
 }
 
-fn create_or_open_key(root_key: HKEY, subkey: &str) -> Option<KeyGuard> {
-    let subkey_wide = encode_wide(subkey);
-    unsafe {
-        let mut opened_key: HKEY = std::ptr::null_mut();
-        if RegCreateKeyExW(
-            root_key,
-            subkey_wide.as_ptr(),
-            0,
-            std::ptr::null(),
-            REG_OPTION_NON_VOLATILE,
-            KEY_WRITE,
-            std::ptr::null(),
-            &raw mut opened_key,
-            std::ptr::null_mut(),
-        ) as u32
-            != ERROR_SUCCESS
-        {
-            return None;
-        }
-        Some(KeyGuard(opened_key))
-    }
-}
-
-fn write_value(opened_key: HKEY, name: Option<&str>, data: &str) -> bool {
-    let data_wide = encode_wide(data);
-    let name_wide = name.map(encode_wide);
-    let name_ptr = name_wide
-        .as_ref()
-        .map_or(std::ptr::null(), |wide| wide.as_ptr());
-    unsafe {
-        RegSetValueExW(
-            opened_key,
-            name_ptr,
-            0,
-            REG_SZ,
-            data_wide.as_ptr().cast(),
-            (data_wide.len() * size_of::<u16>()) as u32,
-        ) as u32
-            == ERROR_SUCCESS
-    }
-}
-
-fn create_key_and_write_value(
-    root_key: HKEY,
-    subkey: &str,
-    name: Option<&str>,
-    data: &str,
-) -> bool {
-    let Some(opened_key) = create_or_open_key(root_key, subkey) else {
-        return false;
-    };
-    write_value(opened_key.0, name, data)
+/// An empty name is the key's default value, which for a `ProgID` is its
+/// friendly name; umpv leaves it blank so the shell falls back to the executable.
+fn write_prog_id(command: &str) -> windows_registry::Result<()> {
+    let prog_id_key = CURRENT_USER.create(SUBKEY_UMPV_PROG_ID)?;
+    prog_id_key.set_string("", "")?;
+    prog_id_key
+        .create(r"shell\open\command")?
+        .set_string("", command)
 }
 
 fn set_associations(extensions: impl IntoIterator<Item = impl AsRef<str>>, prog_id: &str) -> usize {
-    let Some(opened_key) = create_or_open_key(HKEY_CURRENT_USER, SUBKEY_FILE_ASSOCIATIONS) else {
+    let Ok(key) = CURRENT_USER.create(SUBKEY_FILE_ASSOCIATIONS) else {
         return 0;
     };
     let mut count = 0;
     for extension in extensions {
-        if write_value(opened_key.0, Some(extension.as_ref()), prog_id) {
+        if key.set_string(extension, prog_id).is_ok() {
             count += 1;
         }
     }
@@ -177,13 +69,8 @@ fn warn_deprecated_loadfile(loadfile: &str, replacement: &'static str) -> &'stat
     replacement
 }
 
-fn delete_tree(root_key: HKEY, subkey: &str) {
-    let subkey_wide = encode_wide(subkey);
-    unsafe { RegDeleteTreeW(root_key, subkey_wide.as_ptr()) };
-}
-
 pub(crate) fn register(loadfile: Option<&str>, idlescreen: Option<&str>) {
-    let associations = read_associations(HKEY_CURRENT_USER, SUBKEY_FILE_ASSOCIATIONS);
+    let associations = read_associations();
     if associations.is_empty() {
         error_exit("No mpv file associations found.\nRun 'mpv.exe --register' first.");
     }
@@ -211,10 +98,7 @@ pub(crate) fn register(loadfile: Option<&str>, idlescreen: Option<&str>) {
         loadfile,
         idlescreen
     );
-    let command_subkey = format!("{SUBKEY_UMPV_PROG_ID}\\shell\\open\\command");
-    if !create_key_and_write_value(HKEY_CURRENT_USER, SUBKEY_UMPV_PROG_ID, None, "")
-        || !create_key_and_write_value(HKEY_CURRENT_USER, &command_subkey, None, &command)
-    {
+    if write_prog_id(&command).is_err() {
         error_exit("Failed to write umpv ProgID to registry.");
     }
 
@@ -236,7 +120,7 @@ pub(crate) fn register(loadfile: Option<&str>, idlescreen: Option<&str>) {
 }
 
 pub(crate) fn unregister() {
-    let associations = read_associations(HKEY_CURRENT_USER, SUBKEY_FILE_ASSOCIATIONS);
+    let associations = read_associations();
 
     let umpv_associations: Vec<_> = associations
         .iter()
@@ -253,7 +137,7 @@ pub(crate) fn unregister() {
         MPV_PROG_ID,
     );
 
-    delete_tree(HKEY_CURRENT_USER, SUBKEY_UMPV_PROG_ID);
+    let _ = CURRENT_USER.remove_tree(SUBKEY_UMPV_PROG_ID);
 
     notify_shell_change();
     show_message(
