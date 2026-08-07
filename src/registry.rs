@@ -60,7 +60,7 @@ fn set_associations(extensions: impl IntoIterator<Item = impl AsRef<str>>, prog_
     count
 }
 
-pub(crate) fn register(loadfile: &str, idlescreen: &str) -> Result<usize, Error> {
+pub(crate) fn register(loadfile: &str) -> Result<usize, Error> {
     let associations = read_associations();
     if associations.is_empty() {
         return Err(Error::NoAssociations);
@@ -68,10 +68,8 @@ pub(crate) fn register(loadfile: &str, idlescreen: &str) -> Result<usize, Error>
 
     let umpv_path = std::env::current_exe().expect("umpv.exe path");
     let command = format!(
-        "\"{}\" --loadfile={} --idlescreen={} -- \"%L\"",
-        umpv_path.display(),
-        loadfile,
-        idlescreen
+        "\"{}\" --loadfile={loadfile} -- \"%L\"",
+        umpv_path.display()
     );
     write_prog_id(&command).map_err(|_| Error::ProgIdWriteFailed)?;
 

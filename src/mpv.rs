@@ -23,11 +23,10 @@ fn resolve_path() -> Option<PathBuf> {
         .and_then(|exe| exe.parent().map(|dir| dir.join("mpv.exe")))
 }
 
-pub(crate) fn launch(idlescreen: &str, file: &str) -> Result<(), Error> {
+pub(crate) fn launch(file: &str) -> Result<(), Error> {
     let mpv_path = resolve_path().ok_or(Error::NotFound)?;
     Command::new(&mpv_path)
         .arg(format!("--input-ipc-server={}", pipe::PIPE_PATH))
-        .arg(format!("--script-opts=osc-idlescreen={idlescreen}"))
         .arg("--")
         .arg(file)
         .creation_flags(CREATE_NEW_PROCESS_GROUP)

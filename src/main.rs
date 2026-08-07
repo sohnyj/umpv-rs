@@ -75,7 +75,6 @@ fn find_file_argument(args: &[String]) -> Option<String> {
 }
 
 const DEFAULT_LOADFILE: &str = "replace";
-const DEFAULT_IDLESCREEN: &str = "no";
 
 fn find_option_value<'a>(args: &'a [String], prefix: &str) -> Option<&'a str> {
     args.iter().find_map(|arg| arg.strip_prefix(prefix))
@@ -83,10 +82,6 @@ fn find_option_value<'a>(args: &'a [String], prefix: &str) -> Option<&'a str> {
 
 fn find_loadfile(args: &[String]) -> &str {
     find_option_value(args, "--loadfile=").unwrap_or(DEFAULT_LOADFILE)
-}
-
-fn find_idlescreen(args: &[String]) -> &str {
-    find_option_value(args, "--idlescreen=").unwrap_or(DEFAULT_IDLESCREEN)
 }
 
 fn warn_deprecated_loadfile(deprecated: &str, replacement: &str) {
@@ -105,26 +100,15 @@ fn validate_loadfile(loadfile: &str) -> &str {
     }
 }
 
-fn validate_idlescreen(idlescreen: &str) -> &str {
-    if !matches!(idlescreen, "yes" | "no") {
-        error_exit(&format!(
-            "Unsupported idlescreen value: {idlescreen}\nUse 'yes' or 'no'."
-        ));
-    }
-    idlescreen
-}
-
-fn register(args: &[String], loadfile: &str, idlescreen: &str) {
+fn register(args: &[String], loadfile: &str) {
     let given_loadfile = find_loadfile(args);
     if loadfile != given_loadfile {
         warn_deprecated_loadfile(given_loadfile, loadfile);
     }
-    match registry::register(loadfile, idlescreen) {
+    match registry::register(loadfile) {
         Ok(count) => show_message(
             MessageLevel::Info,
-            &format!(
-                "umpv registered for {count} file extension(s).\nloadfile: {loadfile}\nidlescreen: {idlescreen}"
-            ),
+            &format!("umpv registered for {count} file extension(s).\nloadfile: {loadfile}"),
         ),
         Err(registry::Error::NoAssociations) => {
             error_exit("No mpv file associations found.\nRun 'mpv.exe --register' first.")
@@ -148,7 +132,7 @@ fn unregister() {
     }
 }
 
-fn play(args: &[String], loadfile: &str, idlescreen: &str) {
+fn play(args: &[String], loadfile: &str) {
     let Some(file) = find_file_argument(args) else {
         return;
     };
@@ -164,7 +148,7 @@ fn play(args: &[String], loadfile: &str, idlescreen: &str) {
     match pipe::send_file(&file, loadfile) {
         Ok(pid) => mpv::activate_window(pid),
         Err(pipe::Error::NotRunning) => {
-            match mpv::launch(idlescreen, &file) {
+            match mpv::launch(&file) {
                 Ok(()) => {}
                 Err(mpv::Error::NotFound) => error_exit("Failed to launch mpv: mpv.exe not found."),
                 Err(mpv::Error::SpawnFailed(err)) => {
@@ -181,11 +165,10 @@ fn play(args: &[String], loadfile: &str, idlescreen: &str) {
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
     let loadfile = validate_loadfile(find_loadfile(&args));
-    let idlescreen = validate_idlescreen(find_idlescreen(&args));
 
     match find_command(&args) {
-        Some(Command::Register) => register(&args, loadfile, idlescreen),
+        Some(Command::Register) => register(&args, loadfile),
         Some(Command::Unregister) => unregister(),
-        None => play(&args, loadfile, idlescreen),
+        None => play(&args, loadfile),
     }
 }

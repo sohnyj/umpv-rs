@@ -31,10 +31,10 @@ Only processes extensions that were registered by mpv's `--register` (step 1).
 > umpv only supports per-user associations (`HKEY_CURRENT_USER`); running as administrator is neither required nor supported.
 > To set umpv as the default for each extension, go to Windows Settings > Apps > Default apps > mpv, and select umpv.
 
-`--loadfile=` defaults to `replace`, `--idlescreen=` to `no`. Example:
+`--loadfile=` defaults to `replace`. Example:
 
 ```bat
-.\umpv.exe --register --loadfile=append+play --idlescreen=yes
+.\umpv.exe --register --loadfile=append+play
 ```
 
 ### 3. Unregister umpv
@@ -75,17 +75,6 @@ The following flags are not supported:
 | `insert-at+play` | umpv alone cannot determine the playlist index |
 
 See the [mpv documentation](https://mpv.io/manual/master/#command-interface-[%3Coptions%3E]]]) for the full list of options.
-
-## Idlescreen
-
-The `--idlescreen=<value>` option controls whether mpv shows its logo and idle message while waiting for a file. Set at registration time.
-
-| Value | Description |
-|-------|-------------|
-| `no` | Do not show the idle logo (default) |
-| `yes` | Show the idle logo |
-
-Setting `no` avoids a brief idle-logo flash when launching a new instance. Applies only on launch, not when sending files to a running instance. Sets the OSC option [`idlescreen`](https://mpv.io/manual/master/#on-screen-controller-idlescreen) via `--script-opts=osc-idlescreen=`, so it requires mpv's built-in OSC.
 
 ## Cross-compiling
 
