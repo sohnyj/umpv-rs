@@ -28,40 +28,26 @@ fn open_pipe() -> std::io::Result<File> {
         .open(PIPE_PATH)
 }
 
-fn error_code(error: &std::io::Error) -> u32 {
-    error.raw_os_error().unwrap_or_default().cast_unsigned()
-}
-
-fn connect(wait_for_server: bool) -> Result<File, Error> {
+fn connect() -> Result<File, Error> {
     let pipe_path_wide = encode_wide(PIPE_PATH);
     let deadline = Instant::now() + CONNECT_BUDGET;
 
     loop {
-        let error = match open_pipe() {
+        match open_pipe() {
             Ok(pipe) => return Ok(pipe),
-            Err(error) => error_code(&error),
-        };
-        if error == ERROR_FILE_NOT_FOUND && !wait_for_server {
-            return Err(Error::NotRunning);
-        }
-        if error != ERROR_FILE_NOT_FOUND && error != ERROR_PIPE_BUSY {
-            return Err(Error::ConnectFailed);
+            Err(error) => match error.raw_os_error().unwrap_or_default().cast_unsigned() {
+                ERROR_FILE_NOT_FOUND => return Err(Error::NotRunning),
+                ERROR_PIPE_BUSY => {}
+                _ => return Err(Error::ConnectFailed),
+            },
         }
 
         let remaining = deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
-            return Err(if error == ERROR_FILE_NOT_FOUND {
-                Error::NotRunning
-            } else {
-                Error::ConnectFailed
-            });
+            return Err(Error::ConnectFailed);
         }
-        if error == ERROR_PIPE_BUSY {
-            let timeout = u32::try_from(remaining.as_millis()).unwrap_or(u32::MAX);
-            unsafe { WaitNamedPipeW(pipe_path_wide.as_ptr(), timeout) };
-        } else {
-            std::thread::sleep(RETRY_INTERVAL.min(remaining));
-        }
+        let timeout = u32::try_from(remaining.as_millis()).unwrap_or(u32::MAX);
+        unsafe { WaitNamedPipeW(pipe_path_wide.as_ptr(), timeout) };
     }
 }
 
@@ -80,7 +66,7 @@ fn load_command(file: &str, loadfile: &str) -> String {
 }
 
 pub(crate) fn send_file(file: &str, loadfile: &str) -> Result<u32, Error> {
-    let mut pipe = connect(false)?;
+    let mut pipe = connect()?;
     let pid = server_pid(&pipe);
     pipe.write_all(load_command(file, loadfile).as_bytes())
         .map_err(|_| Error::WriteFailed)?;
@@ -88,5 +74,8 @@ pub(crate) fn send_file(file: &str, loadfile: &str) -> Result<u32, Error> {
 }
 
 pub(crate) fn wait_for_server() {
-    let _ = connect(true);
+    let deadline = Instant::now() + CONNECT_BUDGET;
+    while open_pipe().is_err() && Instant::now() < deadline {
+        std::thread::sleep(RETRY_INTERVAL);
+    }
 }

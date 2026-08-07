@@ -2,15 +2,13 @@ use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
 use std::process::Command;
 
-use windows_sys::Win32::Foundation::{FALSE, HWND, LPARAM, TRUE};
+use windows_sys::Win32::Foundation::{FALSE, HWND};
 use windows_sys::Win32::System::Threading::CREATE_NEW_PROCESS_GROUP;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, GetClassNameW, GetWindowThreadProcessId, IsIconic, SW_RESTORE,
-    SetForegroundWindow, ShowWindow,
+    FindWindowExW, GetWindowThreadProcessId, IsIconic, SW_RESTORE, SetForegroundWindow, ShowWindow,
 };
-use windows_sys::core::BOOL;
 
-use crate::pipe;
+use crate::{encode_wide, pipe};
 
 pub(crate) enum Error {
     NotFound,
@@ -35,26 +33,28 @@ pub(crate) fn launch(file: &str) -> Result<(), Error> {
     Ok(())
 }
 
-const MPV_WINDOW_CLASS_NAME: [u16; 3] = [b'm' as u16, b'p' as u16, b'v' as u16];
+const MPV_WINDOW_CLASS_NAME: &str = "mpv";
 
-unsafe extern "system" fn activate_window_if_mpv(hwnd: HWND, lparam: LPARAM) -> BOOL {
-    unsafe {
-        let target_pid = lparam as u32;
-        let mut pid: u32 = 0;
-        GetWindowThreadProcessId(hwnd, &raw mut pid);
-        if pid != target_pid {
-            return TRUE;
+fn find_window(pid: u32) -> Option<HWND> {
+    let class_name_wide = encode_wide(MPV_WINDOW_CLASS_NAME);
+    let mut hwnd: HWND = std::ptr::null_mut();
+    loop {
+        hwnd = unsafe {
+            FindWindowExW(
+                std::ptr::null_mut(),
+                hwnd,
+                class_name_wide.as_ptr(),
+                std::ptr::null(),
+            )
+        };
+        if hwnd.is_null() {
+            return None;
         }
-        let mut class_name = [0u16; 16];
-        let length = GetClassNameW(hwnd, class_name.as_mut_ptr(), class_name.len() as i32);
-        if class_name.get(..length as usize) != Some(&MPV_WINDOW_CLASS_NAME[..]) {
-            return TRUE;
+        let mut window_pid: u32 = 0;
+        unsafe { GetWindowThreadProcessId(hwnd, &raw mut window_pid) };
+        if window_pid == pid {
+            return Some(hwnd);
         }
-        if IsIconic(hwnd) != FALSE {
-            ShowWindow(hwnd, SW_RESTORE);
-        }
-        SetForegroundWindow(hwnd);
-        FALSE
     }
 }
 
@@ -62,5 +62,11 @@ pub(crate) fn activate_window(pid: u32) {
     if pid == 0 {
         return;
     }
-    unsafe { EnumWindows(Some(activate_window_if_mpv), pid as LPARAM) };
+    let Some(hwnd) = find_window(pid) else {
+        return;
+    };
+    if unsafe { IsIconic(hwnd) } != FALSE {
+        unsafe { ShowWindow(hwnd, SW_RESTORE) };
+    }
+    unsafe { SetForegroundWindow(hwnd) };
 }

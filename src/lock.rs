@@ -1,4 +1,6 @@
-use windows_sys::Win32::Foundation::{CloseHandle, FALSE, HANDLE, WAIT_ABANDONED, WAIT_OBJECT_0};
+use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+
+use windows_sys::Win32::Foundation::{FALSE, WAIT_ABANDONED, WAIT_OBJECT_0};
 use windows_sys::Win32::System::Threading::{CreateMutexW, ReleaseMutex, WaitForSingleObject};
 
 use crate::encode_wide;
@@ -8,14 +10,11 @@ pub(crate) enum Error {
     Timeout,
 }
 
-pub(crate) struct Guard(HANDLE);
+pub(crate) struct Guard(OwnedHandle);
 
 impl Drop for Guard {
     fn drop(&mut self) {
-        unsafe {
-            ReleaseMutex(self.0);
-            CloseHandle(self.0);
-        }
+        unsafe { ReleaseMutex(self.0.as_raw_handle()) };
     }
 }
 
@@ -28,10 +27,11 @@ pub(crate) fn acquire() -> Result<Guard, Error> {
     if handle.is_null() {
         return Err(Error::CreateFailed);
     }
-    let wait_result = unsafe { WaitForSingleObject(handle, ACQUIRE_TIMEOUT_MS) };
+    let mutex = unsafe { OwnedHandle::from_raw_handle(handle) };
+
+    let wait_result = unsafe { WaitForSingleObject(mutex.as_raw_handle(), ACQUIRE_TIMEOUT_MS) };
     if wait_result != WAIT_OBJECT_0 && wait_result != WAIT_ABANDONED {
-        unsafe { CloseHandle(handle) };
         return Err(Error::Timeout);
     }
-    Ok(Guard(handle))
+    Ok(Guard(mutex))
 }

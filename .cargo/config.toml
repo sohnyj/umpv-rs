@@ -8,5 +8,7 @@ rustflags = [
     "-C",
     "link-arg=delayimp.lib",
     "-C",
+    "link-arg=/DELAYLOAD:advapi32.dll",
+    "-C",
     "link-arg=/DELAYLOAD:shell32.dll",
 ]
