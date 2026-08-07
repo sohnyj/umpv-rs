@@ -11,4 +11,6 @@ rustflags = [
     "link-arg=/DELAYLOAD:advapi32.dll",
     "-C",
     "link-arg=/DELAYLOAD:shell32.dll",
+    "-C",
+    "link-arg=/DELAYLOAD:user32.dll",
 ]

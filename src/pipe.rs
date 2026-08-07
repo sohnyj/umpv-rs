@@ -18,7 +18,7 @@ pub(crate) enum Error {
 
 pub(crate) const PIPE_PATH: &str = r"\\.\pipe\umpv";
 
-const CONNECT_BUDGET: Duration = Duration::from_secs(5);
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const RETRY_INTERVAL: Duration = Duration::from_millis(25);
 
 fn open_pipe() -> std::io::Result<File> {
@@ -30,7 +30,7 @@ fn open_pipe() -> std::io::Result<File> {
 
 fn connect() -> Result<File, Error> {
     let pipe_path_wide = encode_wide(PIPE_PATH);
-    let deadline = Instant::now() + CONNECT_BUDGET;
+    let timeout_at = Instant::now() + CONNECT_TIMEOUT;
 
     loop {
         match open_pipe() {
@@ -42,12 +42,12 @@ fn connect() -> Result<File, Error> {
             },
         }
 
-        let remaining = deadline.saturating_duration_since(Instant::now());
+        let remaining = timeout_at.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
             return Err(Error::ConnectFailed);
         }
-        let timeout = u32::try_from(remaining.as_millis()).unwrap_or(u32::MAX);
-        unsafe { WaitNamedPipeW(pipe_path_wide.as_ptr(), timeout) };
+        let timeout_ms = u32::try_from(remaining.as_millis()).unwrap_or(u32::MAX);
+        unsafe { WaitNamedPipeW(pipe_path_wide.as_ptr(), timeout_ms) };
     }
 }
 
@@ -57,7 +57,7 @@ fn server_pid(pipe: &File) -> u32 {
     pid
 }
 
-fn load_command(file: &str, loadfile: &str) -> String {
+fn loadfile_command(file: &str, loadfile: &str) -> String {
     let escaped = file
         .replace('\\', r"\\")
         .replace('"', "\\\"")
@@ -68,14 +68,14 @@ fn load_command(file: &str, loadfile: &str) -> String {
 pub(crate) fn send_file(file: &str, loadfile: &str) -> Result<u32, Error> {
     let mut pipe = connect()?;
     let pid = server_pid(&pipe);
-    pipe.write_all(load_command(file, loadfile).as_bytes())
+    pipe.write_all(loadfile_command(file, loadfile).as_bytes())
         .map_err(|_| Error::WriteFailed)?;
     Ok(pid)
 }
 
 pub(crate) fn wait_for_server() {
-    let deadline = Instant::now() + CONNECT_BUDGET;
-    while open_pipe().is_err() && Instant::now() < deadline {
+    let timeout_at = Instant::now() + CONNECT_TIMEOUT;
+    while open_pipe().is_err() && Instant::now() < timeout_at {
         std::thread::sleep(RETRY_INTERVAL);
     }
 }

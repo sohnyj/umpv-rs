@@ -89,9 +89,9 @@ fn validate_loadfile(loadfile: &str) -> &str {
     }
 }
 
-fn register(given_loadfile: &str, loadfile: &str) {
-    if loadfile != given_loadfile {
-        warn_deprecated_loadfile(given_loadfile, loadfile);
+fn register(requested_loadfile: &str, loadfile: &str) {
+    if loadfile != requested_loadfile {
+        warn_deprecated_loadfile(requested_loadfile, loadfile);
     }
     let Ok(umpv_path) = env::current_exe() else {
         error_exit("Failed to locate umpv.exe.");
@@ -141,9 +141,9 @@ fn play(args: &[String], loadfile: &str) {
         Ok(pid) => mpv::activate_window(pid),
         Err(pipe::Error::NotRunning) => match mpv::launch(&file) {
             Ok(()) => pipe::wait_for_server(),
-            Err(mpv::Error::NotFound) => error_exit("Failed to locate mpv.exe."),
+            Err(mpv::Error::UmpvPathUnknown) => error_exit("Failed to locate umpv.exe."),
             Err(mpv::Error::SpawnFailed(err)) => {
-                error_exit(&format!("Failed to launch mpv: {err}"))
+                error_exit(&format!("Failed to launch mpv.exe: {err}"))
             }
         },
         Err(pipe::Error::ConnectFailed) => error_exit("Failed to connect to mpv."),
@@ -153,11 +153,11 @@ fn play(args: &[String], loadfile: &str) {
 
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
-    let given_loadfile = find_loadfile(&args);
-    let loadfile = validate_loadfile(given_loadfile);
+    let requested_loadfile = find_loadfile(&args);
+    let loadfile = validate_loadfile(requested_loadfile);
 
     match find_command(&args) {
-        Some(Command::Register) => register(given_loadfile, loadfile),
+        Some(Command::Register) => register(requested_loadfile, loadfile),
         Some(Command::Unregister) => unregister(),
         None => play(&args, loadfile),
     }

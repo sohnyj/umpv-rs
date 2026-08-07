@@ -11,18 +11,18 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 use crate::{encode_wide, pipe};
 
 pub(crate) enum Error {
-    NotFound,
+    UmpvPathUnknown,
     SpawnFailed(std::io::Error),
 }
 
-fn resolve_path() -> Option<PathBuf> {
+fn executable_path() -> Option<PathBuf> {
     std::env::current_exe()
         .ok()
         .and_then(|exe| exe.parent().map(|dir| dir.join("mpv.exe")))
 }
 
 pub(crate) fn launch(file: &str) -> Result<(), Error> {
-    let mpv_path = resolve_path().ok_or(Error::NotFound)?;
+    let mpv_path = executable_path().ok_or(Error::UmpvPathUnknown)?;
     Command::new(&mpv_path)
         .arg(format!("--input-ipc-server={}", pipe::PIPE_PATH))
         .arg("--")
