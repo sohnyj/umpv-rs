@@ -5,7 +5,8 @@ use std::process::Command;
 use windows_sys::Win32::Foundation::{FALSE, HWND};
 use windows_sys::Win32::System::Threading::CREATE_NEW_PROCESS_GROUP;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    FindWindowExW, GetWindowThreadProcessId, IsIconic, SW_RESTORE, SetForegroundWindow, ShowWindow,
+    AllowSetForegroundWindow, FindWindowExW, GetWindowThreadProcessId, IsIconic, SW_RESTORE,
+    SetForegroundWindow, ShowWindow,
 };
 
 use crate::{encode_wide, pipe};
@@ -23,13 +24,14 @@ fn executable_path() -> Option<PathBuf> {
 
 pub(crate) fn launch(file: &str) -> Result<(), Error> {
     let mpv_path = executable_path().ok_or(Error::UmpvPathUnknown)?;
-    Command::new(&mpv_path)
+    let mpv = Command::new(&mpv_path)
         .arg(format!("--input-ipc-server={}", pipe::PIPE_PATH))
         .arg("--")
         .arg(file)
         .creation_flags(CREATE_NEW_PROCESS_GROUP)
         .spawn()
         .map_err(Error::SpawnFailed)?;
+    unsafe { AllowSetForegroundWindow(mpv.id()) };
     Ok(())
 }
 
