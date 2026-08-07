@@ -65,7 +65,7 @@ The following flags (deprecated since mpv 0.42) are also accepted:
 | `insert-next-play` | Equivalent to `insert-next+play` |
 
 > [!NOTE]
-> Deprecated flags are rewritten to their `+play` form at registration time, not when a file is opened. Older umpv versions stored them as given, so if you registered a deprecated flag with one of those versions, run `.\umpv.exe --register` again to rewrite the stored value.
+> Deprecated flags are rewritten to their `+play` form wherever they are given, but only `--register` reports the rewrite. Older umpv versions stored them as given; such a registration still plays correctly, since the stored flag is rewritten again on each file open, and running `.\umpv.exe --register` once rewrites the stored value.
 
 The following flags are not supported:
 

@@ -48,10 +48,6 @@ fn error_exit(text: &str) -> ! {
     process::exit(1);
 }
 
-fn find_option_value<'a>(args: &'a [String], prefix: &str) -> Option<&'a str> {
-    args.iter().find_map(|arg| arg.strip_prefix(prefix))
-}
-
 enum Command {
     Register,
     Unregister,
@@ -81,6 +77,43 @@ fn find_file_argument(args: &[String]) -> Option<String> {
 const DEFAULT_LOADFILE: &str = "replace";
 const DEFAULT_IDLESCREEN: &str = "no";
 
+fn find_option_value<'a>(args: &'a [String], prefix: &str) -> Option<&'a str> {
+    args.iter().find_map(|arg| arg.strip_prefix(prefix))
+}
+
+fn find_loadfile(args: &[String]) -> &str {
+    find_option_value(args, "--loadfile=").unwrap_or(DEFAULT_LOADFILE)
+}
+
+fn find_idlescreen(args: &[String]) -> &str {
+    find_option_value(args, "--idlescreen=").unwrap_or(DEFAULT_IDLESCREEN)
+}
+
+fn warn_deprecated_loadfile(deprecated: &str, replacement: &str) {
+    show_message(
+        MessageLevel::Warning,
+        &format!("'{deprecated}' is deprecated since mpv 0.42.\nUsing '{replacement}' instead."),
+    );
+}
+
+fn validate_loadfile(loadfile: &str) -> &str {
+    match loadfile {
+        "replace" | "append" | "append+play" | "insert-next" | "insert-next+play" => loadfile,
+        "append-play" => "append+play",
+        "insert-next-play" => "insert-next+play",
+        _ => error_exit(&format!("Unsupported loadfile flag: {loadfile}")),
+    }
+}
+
+fn validate_idlescreen(idlescreen: &str) -> &str {
+    if !matches!(idlescreen, "yes" | "no") {
+        error_exit(&format!(
+            "Unsupported idlescreen value: {idlescreen}\nUse 'yes' or 'no'."
+        ));
+    }
+    idlescreen
+}
+
 fn main() {
     unsafe {
         windows_sys::Win32::UI::HiDpi::SetProcessDpiAwareness(
@@ -89,11 +122,15 @@ fn main() {
     };
 
     let args: Vec<String> = env::args().skip(1).collect();
-    let loadfile = find_option_value(&args, "--loadfile=");
-    let idlescreen = find_option_value(&args, "--idlescreen=");
+    let given_loadfile = find_loadfile(&args);
+    let loadfile = validate_loadfile(given_loadfile);
+    let idlescreen = validate_idlescreen(find_idlescreen(&args));
 
     match find_command(&args) {
         Some(Command::Register) => {
+            if loadfile != given_loadfile {
+                warn_deprecated_loadfile(given_loadfile, loadfile);
+            }
             registry::register(loadfile, idlescreen);
             return;
         }
@@ -107,9 +144,6 @@ fn main() {
     let Some(file) = find_file_argument(&args) else {
         return;
     };
-
-    let loadfile = loadfile.unwrap_or(DEFAULT_LOADFILE);
-    let idlescreen = idlescreen.unwrap_or(DEFAULT_IDLESCREEN);
 
     let _lock_guard = match lock::acquire() {
         Ok(guard) => guard,
