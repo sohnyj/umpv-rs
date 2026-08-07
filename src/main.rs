@@ -179,12 +179,6 @@ fn play(args: &[String], loadfile: &str, idlescreen: &str) {
 }
 
 fn main() {
-    unsafe {
-        windows_sys::Win32::UI::HiDpi::SetProcessDpiAwareness(
-            windows_sys::Win32::UI::HiDpi::PROCESS_PER_MONITOR_DPI_AWARE,
-        )
-    };
-
     let args: Vec<String> = env::args().skip(1).collect();
     let loadfile = validate_loadfile(find_loadfile(&args));
     let idlescreen = validate_idlescreen(find_idlescreen(&args));
