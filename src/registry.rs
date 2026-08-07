@@ -1,7 +1,11 @@
 use windows_registry::{CURRENT_USER, Type};
 use windows_sys::Win32::UI::Shell::{SHCNE_ASSOCCHANGED, SHCNF_IDLIST, SHChangeNotify};
 
-use crate::{MessageLevel, error_exit, show_message};
+pub(crate) enum Error {
+    NoAssociations,
+    ProgIdWriteFailed,
+    NoExtensionsRegistered,
+}
 
 const SUBKEY_FILE_ASSOCIATIONS: &str = r"Software\Clients\Media\mpv\Capabilities\FileAssociations";
 const SUBKEY_UMPV_PROG_ID: &str = r"Software\Classes\io.mpv.umpv";
@@ -56,10 +60,10 @@ fn set_associations(extensions: impl IntoIterator<Item = impl AsRef<str>>, prog_
     count
 }
 
-pub(crate) fn register(loadfile: &str, idlescreen: &str) {
+pub(crate) fn register(loadfile: &str, idlescreen: &str) -> Result<usize, Error> {
     let associations = read_associations();
     if associations.is_empty() {
-        error_exit("No mpv file associations found.\nRun 'mpv.exe --register' first.");
+        return Err(Error::NoAssociations);
     }
 
     let umpv_path = std::env::current_exe().expect("umpv.exe path");
@@ -69,50 +73,35 @@ pub(crate) fn register(loadfile: &str, idlescreen: &str) {
         loadfile,
         idlescreen
     );
-    if write_prog_id(&command).is_err() {
-        error_exit("Failed to write umpv ProgID to registry.");
-    }
+    write_prog_id(&command).map_err(|_| Error::ProgIdWriteFailed)?;
 
     let count = set_associations(
         associations.iter().map(|(extension, _)| extension),
         UMPV_PROG_ID,
     );
     if count == 0 {
-        error_exit("Failed to register any file associations.");
+        return Err(Error::NoExtensionsRegistered);
     }
 
     notify_shell_change();
-    show_message(
-        MessageLevel::Info,
-        &format!(
-            "umpv registered for {count} file extension(s).\nloadfile: {loadfile}\nidlescreen: {idlescreen}"
-        ),
-    );
+    Ok(count)
 }
 
-pub(crate) fn unregister() {
+pub(crate) fn unregister() -> usize {
     let associations = read_associations();
-
-    let umpv_associations: Vec<_> = associations
+    let umpv_extensions: Vec<&String> = associations
         .iter()
-        .filter(|(_, data)| data == UMPV_PROG_ID)
+        .filter(|(_, prog_id)| prog_id == UMPV_PROG_ID)
+        .map(|(extension, _)| extension)
         .collect();
 
-    if umpv_associations.is_empty() {
-        show_message(MessageLevel::Info, "Nothing to unregister.");
-        return;
+    if umpv_extensions.is_empty() {
+        return 0;
     }
 
-    let count = set_associations(
-        umpv_associations.iter().map(|(extension, _)| extension),
-        MPV_PROG_ID,
-    );
-
+    let count = set_associations(umpv_extensions, MPV_PROG_ID);
     let _ = CURRENT_USER.remove_tree(SUBKEY_UMPV_PROG_ID);
 
     notify_shell_change();
-    show_message(
-        MessageLevel::Info,
-        &format!("umpv unregistered for {count} file extension(s)."),
-    );
+    count
 }

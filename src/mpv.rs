@@ -12,20 +12,27 @@ use windows_sys::core::BOOL;
 
 use crate::pipe;
 
+pub(crate) enum Error {
+    NotFound,
+    SpawnFailed(std::io::Error),
+}
+
 fn resolve_path() -> Option<PathBuf> {
     std::env::current_exe()
         .ok()
         .and_then(|exe| exe.parent().map(|dir| dir.join("mpv.exe")))
 }
 
-pub(crate) fn launch(idlescreen: &str) -> std::io::Result<()> {
-    let mpv_path = resolve_path()
-        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "mpv.exe not found."))?;
+pub(crate) fn launch(idlescreen: &str, file: &str) -> Result<(), Error> {
+    let mpv_path = resolve_path().ok_or(Error::NotFound)?;
     Command::new(&mpv_path)
         .arg(format!("--input-ipc-server={}", pipe::PIPE_PATH))
         .arg(format!("--script-opts=osc-idlescreen={idlescreen}"))
+        .arg("--")
+        .arg(file)
         .creation_flags(CREATE_NEW_PROCESS_GROUP)
-        .spawn()?;
+        .spawn()
+        .map_err(Error::SpawnFailed)?;
     Ok(())
 }
 
@@ -41,14 +48,14 @@ unsafe extern "system" fn activate_window_if_mpv(hwnd: HWND, lparam: LPARAM) -> 
         }
         let mut class_name = [0u16; 16];
         let length = GetClassNameW(hwnd, class_name.as_mut_ptr(), class_name.len() as i32);
-        if class_name.get(..length as usize) == Some(&MPV_WINDOW_CLASS_NAME[..]) {
-            if IsIconic(hwnd) != FALSE {
-                ShowWindow(hwnd, SW_RESTORE);
-            }
-            SetForegroundWindow(hwnd);
-            return FALSE;
+        if class_name.get(..length as usize) != Some(&MPV_WINDOW_CLASS_NAME[..]) {
+            return TRUE;
         }
-        TRUE
+        if IsIconic(hwnd) != FALSE {
+            ShowWindow(hwnd, SW_RESTORE);
+        }
+        SetForegroundWindow(hwnd);
+        FALSE
     }
 }
 

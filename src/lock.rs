@@ -24,16 +24,14 @@ const ACQUIRE_TIMEOUT_MS: u32 = 10_000;
 
 pub(crate) fn acquire() -> Result<Guard, Error> {
     let mutex_name_wide = encode_wide(MUTEX_NAME);
-    unsafe {
-        let handle = CreateMutexW(std::ptr::null(), FALSE, mutex_name_wide.as_ptr());
-        if handle.is_null() {
-            return Err(Error::CreateFailed);
-        }
-        let wait_result = WaitForSingleObject(handle, ACQUIRE_TIMEOUT_MS);
-        if wait_result != WAIT_OBJECT_0 && wait_result != WAIT_ABANDONED {
-            CloseHandle(handle);
-            return Err(Error::Timeout);
-        }
-        Ok(Guard(handle))
+    let handle = unsafe { CreateMutexW(std::ptr::null(), FALSE, mutex_name_wide.as_ptr()) };
+    if handle.is_null() {
+        return Err(Error::CreateFailed);
     }
+    let wait_result = unsafe { WaitForSingleObject(handle, ACQUIRE_TIMEOUT_MS) };
+    if wait_result != WAIT_OBJECT_0 && wait_result != WAIT_ABANDONED {
+        unsafe { CloseHandle(handle) };
+        return Err(Error::Timeout);
+    }
+    Ok(Guard(handle))
 }

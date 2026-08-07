@@ -114,34 +114,42 @@ fn validate_idlescreen(idlescreen: &str) -> &str {
     idlescreen
 }
 
-fn main() {
-    unsafe {
-        windows_sys::Win32::UI::HiDpi::SetProcessDpiAwareness(
-            windows_sys::Win32::UI::HiDpi::PROCESS_PER_MONITOR_DPI_AWARE,
-        )
-    };
-
-    let args: Vec<String> = env::args().skip(1).collect();
-    let given_loadfile = find_loadfile(&args);
-    let loadfile = validate_loadfile(given_loadfile);
-    let idlescreen = validate_idlescreen(find_idlescreen(&args));
-
-    match find_command(&args) {
-        Some(Command::Register) => {
-            if loadfile != given_loadfile {
-                warn_deprecated_loadfile(given_loadfile, loadfile);
-            }
-            registry::register(loadfile, idlescreen);
-            return;
-        }
-        Some(Command::Unregister) => {
-            registry::unregister();
-            return;
-        }
-        None => {}
+fn register(args: &[String], loadfile: &str, idlescreen: &str) {
+    let given_loadfile = find_loadfile(args);
+    if loadfile != given_loadfile {
+        warn_deprecated_loadfile(given_loadfile, loadfile);
     }
+    match registry::register(loadfile, idlescreen) {
+        Ok(count) => show_message(
+            MessageLevel::Info,
+            &format!(
+                "umpv registered for {count} file extension(s).\nloadfile: {loadfile}\nidlescreen: {idlescreen}"
+            ),
+        ),
+        Err(registry::Error::NoAssociations) => {
+            error_exit("No mpv file associations found.\nRun 'mpv.exe --register' first.")
+        }
+        Err(registry::Error::ProgIdWriteFailed) => {
+            error_exit("Failed to write umpv ProgID to registry.")
+        }
+        Err(registry::Error::NoExtensionsRegistered) => {
+            error_exit("Failed to register any file associations.")
+        }
+    }
+}
 
-    let Some(file) = find_file_argument(&args) else {
+fn unregister() {
+    match registry::unregister() {
+        0 => show_message(MessageLevel::Info, "Nothing to unregister."),
+        count => show_message(
+            MessageLevel::Info,
+            &format!("umpv unregistered for {count} file extension(s)."),
+        ),
+    }
+}
+
+fn play(args: &[String], loadfile: &str, idlescreen: &str) {
+    let Some(file) = find_file_argument(args) else {
         return;
     };
 
@@ -153,17 +161,37 @@ fn main() {
         Err(lock::Error::CreateFailed) => error_exit("Failed to create umpv lock."),
     };
 
-    match pipe::send_file(&file, loadfile, false) {
+    match pipe::send_file(&file, loadfile) {
         Ok(pid) => mpv::activate_window(pid),
         Err(pipe::Error::NotRunning) => {
-            if let Err(err) = mpv::launch(idlescreen) {
-                error_exit(&format!("Failed to launch mpv: {err}"));
+            match mpv::launch(idlescreen, &file) {
+                Ok(()) => {}
+                Err(mpv::Error::NotFound) => error_exit("Failed to launch mpv: mpv.exe not found."),
+                Err(mpv::Error::SpawnFailed(err)) => {
+                    error_exit(&format!("Failed to launch mpv: {err}"))
+                }
             }
-            if pipe::send_file(&file, loadfile, true).is_err() {
-                error_exit("Failed to send the file to mpv.");
-            }
+            pipe::wait_for_server();
         }
         Err(pipe::Error::ConnectFailed) => error_exit("Failed to connect to mpv."),
         Err(pipe::Error::WriteFailed) => error_exit("Failed to send the file to mpv."),
+    }
+}
+
+fn main() {
+    unsafe {
+        windows_sys::Win32::UI::HiDpi::SetProcessDpiAwareness(
+            windows_sys::Win32::UI::HiDpi::PROCESS_PER_MONITOR_DPI_AWARE,
+        )
+    };
+
+    let args: Vec<String> = env::args().skip(1).collect();
+    let loadfile = validate_loadfile(find_loadfile(&args));
+    let idlescreen = validate_idlescreen(find_idlescreen(&args));
+
+    match find_command(&args) {
+        Some(Command::Register) => register(&args, loadfile, idlescreen),
+        Some(Command::Unregister) => unregister(),
+        None => play(&args, loadfile, idlescreen),
     }
 }
