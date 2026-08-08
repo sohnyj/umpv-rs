@@ -1,6 +1,6 @@
 # umpv-rs
 
-A single-instance mpv launcher for Windows, written in Rust. Based on the [umpv](https://github.com/mpv-player/mpv/blob/master/TOOLS/umpv) Python script from the mpv project. Opens files in a running mpv window via named pipe IPC, or launches a new instance if none is running.
+A single-instance mpv launcher for Windows, written in Rust. Opens files in a running mpv window via named pipe IPC, or launches a new instance if none is running.
 
 ## Minimum Requirements
 
@@ -9,45 +9,39 @@ A single-instance mpv launcher for Windows, written in Rust. Based on the [umpv]
 
 ## Usage
 
-**Place umpv.exe in the same directory as mpv.exe.** umpv launches `mpv.exe` from its own directory, so PATH is not consulted.
+**Place `umpv.exe` next to `mpv.exe`.** umpv launches `mpv.exe` from its own directory, so PATH is not consulted.
 
-### 1. Register file associations with mpv ([mpv's `--register`](https://mpv.io/manual/master/#options-register))
+### 1. Register extensions with mpv
+
+Specify the extensions you want; leave a category empty (`=`) to skip it. See [mpv's `--register`](https://mpv.io/manual/master/#options-register).
 
 ```bat
 .\mpv.com --register --video-exts=mp4,mkv --audio-exts= --image-exts= --archive-exts= --playlist-exts=
 ```
 
-Specify the extensions you want. Leave a category empty (`=`) to skip it.
-
-### 2. Add umpv to mpv's registered extensions
-
-Only processes extensions that were registered by mpv's `--register` (step 1).
-
-```bat
-.\umpv.exe --register
-```
-
-> [!NOTE]
-> umpv only supports per-user associations (`HKEY_CURRENT_USER`); running as administrator is neither required nor supported.
-> To set umpv as the default for each extension, go to Windows Settings > Apps > Default apps > mpv, and select umpv.
-
-`--loadfile=` defaults to `replace`. Example:
+### 2. Point those extensions at umpv
 
 ```bat
 .\umpv.exe --register --loadfile=append+play
 ```
 
-### 3. Unregister umpv
+Only extensions registered in step 1 are processed. `--loadfile=` is optional and defaults to `replace`.
+
+> [!NOTE]
+> Per-user associations only (`HKEY_CURRENT_USER`); administrator is neither required nor supported.
+> To make umpv the default for each extension, go to Windows Settings > Apps > Default apps > mpv, and select umpv.
+
+### 3. Unregister
 
 ```bat
 .\umpv.exe --unregister
 ```
 
-Removes umpv file associations from the registry. Does not restore previous defaults.
+Points the extensions back at mpv. Defaults set by other applications are not restored.
 
 ## Loadfile modes
 
-The `--loadfile=<value>` option controls how files are added to the mpv playlist. Set at registration time.
+`--loadfile=<value>` controls how files are added to the mpv playlist. Set at registration time.
 
 | Value | Description |
 |-------|-------------|
@@ -57,56 +51,25 @@ The `--loadfile=<value>` option controls how files are added to the mpv playlist
 | `insert-next` | Insert after the current item |
 | `insert-next+play` | Insert after the current item, and force playback to start |
 
-The following flags (deprecated since mpv 0.42) are also accepted:
-
-| Value | Description |
-|-------|-------------|
-| `append-play` | Equivalent to `append+play` |
-| `insert-next-play` | Equivalent to `insert-next+play` |
-
-> [!NOTE]
-> Deprecated flags are rewritten to their `+play` form wherever they are given, but only `--register` reports the rewrite. Older umpv versions stored them as given; such a registration still plays correctly, since the stored flag is rewritten again on each file open, and running `.\umpv.exe --register` once rewrites the stored value.
-
-The following flags are not supported:
-
-| Value | Description |
-|-------|-------------|
-| `insert-at` | umpv alone cannot determine the playlist index |
-| `insert-at+play` | umpv alone cannot determine the playlist index |
-
-See the [mpv documentation](https://mpv.io/manual/master/#command-interface-[%3Coptions%3E]]]) for the full list of options.
+`append-play` and `insert-next-play`, deprecated since mpv 0.42, are accepted and rewritten to their `+play` form. `insert-at` and `insert-at+play` are not supported, as umpv alone cannot determine the playlist index. See the [mpv documentation](https://mpv.io/manual/master/#command-interface-[%3Coptions%3E]]]) for the full list.
 
 ## Cross-compiling
 
-umpv is cross-compiled from Linux (including WSL) to the `x86_64-pc-windows-msvc` target. CI builds use the same toolchain ([build.yml](.github/workflows/build.yml)).
-
-### Requirements
-
-- [Rust](https://www.rust-lang.org/) with the `x86_64-pc-windows-msvc` target
-- [cargo-xwin](https://github.com/rust-cross/cargo-xwin): downloads the MSVC CRT and Windows SDK automatically
-- [LLVM](https://llvm.org/) tools:
-  - `llvm-rc`: compiles the icon resource; requires `clang` for preprocessing
-  - `lld-link`: linker for the MSVC target
-- A host C toolchain (`cc`): required to compile build scripts and cargo-xwin itself
-
-### Setup (Ubuntu / WSL)
+umpv is built from Linux (including WSL) for the `x86_64-pc-windows-msvc` target. CI uses the same toolchain ([build.yml](.github/workflows/build.yml)).
 
 ```bash
-# Rust toolchain
+# Host C toolchain for build scripts, plus llvm-rc (icon resource) and lld-link (linker)
+sudo apt-get install -y build-essential llvm clang lld
+
+# Rust with the Windows target
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source ~/.cargo/env
 rustup target add x86_64-pc-windows-msvc
 
-# Host C toolchain and LLVM tools
-sudo apt-get install -y build-essential llvm clang lld
-
-# cargo-xwin
+# cargo-xwin, which downloads the MSVC CRT and Windows SDK on first build
 cargo install cargo-xwin
-```
 
-### Build
-
-```bash
+# Build
 cargo xwin build --release
 ```
 
