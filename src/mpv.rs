@@ -1,6 +1,7 @@
 use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Child, Command};
+use std::time::{Duration, Instant};
 
 use windows_sys::Win32::Foundation::{FALSE, HWND};
 use windows_sys::Win32::System::Threading::CREATE_NEW_PROCESS_GROUP;
@@ -14,25 +15,46 @@ use crate::{encode_wide, pipe};
 pub(crate) enum Error {
     UmpvPathUnknown,
     SpawnFailed(std::io::Error),
+    Exited,
+    StartupTimedOut,
 }
+
+const START_TIMEOUT: Duration = Duration::from_secs(5);
+const POLL_INTERVAL: Duration = Duration::from_millis(25);
 
 fn executable_path() -> Option<PathBuf> {
     std::env::current_exe()
         .ok()
-        .and_then(|exe| exe.parent().map(|dir| dir.join("mpv.exe")))
+        .and_then(|exe| exe.parent().map(|directory| directory.join("mpv.exe")))
 }
 
 pub(crate) fn launch(file: &str) -> Result<(), Error> {
     let mpv_path = executable_path().ok_or(Error::UmpvPathUnknown)?;
-    let mpv = Command::new(&mpv_path)
+    let mut mpv_process = Command::new(&mpv_path)
         .arg(format!("--input-ipc-server={}", pipe::PIPE_PATH))
         .arg("--")
         .arg(file)
         .creation_flags(CREATE_NEW_PROCESS_GROUP)
         .spawn()
         .map_err(Error::SpawnFailed)?;
-    unsafe { AllowSetForegroundWindow(mpv.id()) };
-    Ok(())
+    unsafe { AllowSetForegroundWindow(mpv_process.id()) };
+    wait_until_ready(&mut mpv_process)
+}
+
+fn wait_until_ready(mpv_process: &mut Child) -> Result<(), Error> {
+    let timeout_at = Instant::now() + START_TIMEOUT;
+    loop {
+        if pipe::server_exists() {
+            return Ok(());
+        }
+        if matches!(mpv_process.try_wait(), Ok(Some(_))) {
+            return Err(Error::Exited);
+        }
+        if Instant::now() >= timeout_at {
+            return Err(Error::StartupTimedOut);
+        }
+        std::thread::sleep(POLL_INTERVAL);
+    }
 }
 
 const MPV_WINDOW_CLASS_NAME: &str = "mpv";

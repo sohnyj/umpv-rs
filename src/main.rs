@@ -176,12 +176,7 @@ fn send_or_launch(file: &str, loadfile: &str) -> Result<Option<u32>, PlayError> 
 
     match pipe::send_file(file, loadfile) {
         Ok(pid) => Ok(Some(pid)),
-        Err(pipe::Error::NotRunning) => mpv::launch(file)
-            .map(|()| {
-                pipe::wait_for_server();
-                None
-            })
-            .map_err(PlayError::Mpv),
+        Err(pipe::Error::NotRunning) => mpv::launch(file).map(|()| None).map_err(PlayError::Mpv),
         Err(pipe::Error::ConnectFailed) => Err(PlayError::ConnectFailed),
         Err(pipe::Error::WriteFailed) => Err(PlayError::WriteFailed),
     }
@@ -209,6 +204,12 @@ fn play(files: &[String], loadfile: &str) {
         }
         Err(PlayError::Mpv(mpv::Error::SpawnFailed(error))) => {
             error_exit(&format!("Failed to launch mpv.exe: {error}"))
+        }
+        Err(PlayError::Mpv(mpv::Error::Exited)) => {
+            error_exit("mpv.exe exited before it opened the file.")
+        }
+        Err(PlayError::Mpv(mpv::Error::StartupTimedOut)) => {
+            error_exit("Timed out waiting for mpv.exe to start.")
         }
         Err(PlayError::ConnectFailed) => error_exit("Failed to connect to mpv."),
         Err(PlayError::WriteFailed) => error_exit("Failed to send the file to mpv."),
