@@ -1,12 +1,13 @@
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
 
-use windows_sys::Win32::Foundation::{FALSE, WAIT_ABANDONED, WAIT_OBJECT_0};
+use windows_sys::Win32::Foundation::{FALSE, WAIT_ABANDONED, WAIT_OBJECT_0, WAIT_TIMEOUT};
 use windows_sys::Win32::System::Threading::{CreateMutexW, ReleaseMutex, WaitForSingleObject};
 
 use crate::encode_wide;
 
 pub(crate) enum Error {
     CreateFailed,
+    WaitFailed,
     Timeout,
 }
 
@@ -19,7 +20,7 @@ impl Drop for Guard {
 }
 
 const MUTEX_NAME: &str = "umpv_lock";
-const ACQUIRE_TIMEOUT_MS: u32 = 10_000;
+const ACQUIRE_TIMEOUT_MILLISECONDS: u32 = 10_000;
 
 pub(crate) fn acquire() -> Result<Guard, Error> {
     let mutex_name_wide = encode_wide(MUTEX_NAME);
@@ -29,9 +30,9 @@ pub(crate) fn acquire() -> Result<Guard, Error> {
     }
     let mutex = unsafe { OwnedHandle::from_raw_handle(handle) };
 
-    let wait_result = unsafe { WaitForSingleObject(mutex.as_raw_handle(), ACQUIRE_TIMEOUT_MS) };
-    if wait_result != WAIT_OBJECT_0 && wait_result != WAIT_ABANDONED {
-        return Err(Error::Timeout);
+    match unsafe { WaitForSingleObject(mutex.as_raw_handle(), ACQUIRE_TIMEOUT_MILLISECONDS) } {
+        WAIT_OBJECT_0 | WAIT_ABANDONED => Ok(Guard(mutex)),
+        WAIT_TIMEOUT => Err(Error::Timeout),
+        _ => Err(Error::WaitFailed),
     }
-    Ok(Guard(mutex))
 }
