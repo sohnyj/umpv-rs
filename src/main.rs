@@ -164,30 +164,51 @@ fn unregister() {
     }
 }
 
+enum PlayError {
+    Lock(lock::Error),
+    Mpv(mpv::Error),
+    ConnectFailed,
+    WriteFailed,
+}
+
+fn send_or_launch(file: &str, loadfile: &str) -> Result<Option<u32>, PlayError> {
+    let _lock_guard = lock::acquire().map_err(PlayError::Lock)?;
+
+    match pipe::send_file(file, loadfile) {
+        Ok(pid) => Ok(Some(pid)),
+        Err(pipe::Error::NotRunning) => mpv::launch(file)
+            .map(|()| {
+                pipe::wait_for_server();
+                None
+            })
+            .map_err(PlayError::Mpv),
+        Err(pipe::Error::ConnectFailed) => Err(PlayError::ConnectFailed),
+        Err(pipe::Error::WriteFailed) => Err(PlayError::WriteFailed),
+    }
+}
+
 fn play(files: &[String], loadfile: &str) {
     let Some(file) = find_file_path(files) else {
         return;
     };
 
-    let _lock_guard = match lock::acquire() {
-        Ok(guard) => guard,
-        Err(lock::Error::Timeout) => {
+    match send_or_launch(&file, loadfile) {
+        Ok(Some(pid)) => mpv::activate_window(pid),
+        Ok(None) => {}
+        Err(PlayError::Lock(lock::Error::CreateFailed)) => {
+            error_exit("Failed to create umpv lock.")
+        }
+        Err(PlayError::Lock(lock::Error::Timeout)) => {
             error_exit("Failed to acquire lock: an mpv instance is not responding.")
         }
-        Err(lock::Error::CreateFailed) => error_exit("Failed to create umpv lock."),
-    };
-
-    match pipe::send_file(&file, loadfile) {
-        Ok(pid) => mpv::activate_window(pid),
-        Err(pipe::Error::NotRunning) => match mpv::launch(&file) {
-            Ok(()) => pipe::wait_for_server(),
-            Err(mpv::Error::UmpvPathUnknown) => error_exit("Failed to locate umpv.exe."),
-            Err(mpv::Error::SpawnFailed(err)) => {
-                error_exit(&format!("Failed to launch mpv.exe: {err}"))
-            }
-        },
-        Err(pipe::Error::ConnectFailed) => error_exit("Failed to connect to mpv."),
-        Err(pipe::Error::WriteFailed) => error_exit("Failed to send the file to mpv."),
+        Err(PlayError::Mpv(mpv::Error::UmpvPathUnknown)) => {
+            error_exit("Failed to locate umpv.exe.")
+        }
+        Err(PlayError::Mpv(mpv::Error::SpawnFailed(error))) => {
+            error_exit(&format!("Failed to launch mpv.exe: {error}"))
+        }
+        Err(PlayError::ConnectFailed) => error_exit("Failed to connect to mpv."),
+        Err(PlayError::WriteFailed) => error_exit("Failed to send the file to mpv."),
     }
 }
 
