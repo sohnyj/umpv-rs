@@ -88,11 +88,11 @@ pub(crate) fn unregister() -> usize {
         .map(|(extension, _)| extension)
         .collect();
 
-    if umpv_extensions.is_empty() {
-        return 0;
-    }
-
-    let count = set_associations(umpv_extensions, MPV_PROG_ID);
+    let count = if umpv_extensions.is_empty() {
+        0
+    } else {
+        set_associations(umpv_extensions, MPV_PROG_ID)
+    };
     let _ = CURRENT_USER.remove_tree(SUBKEY_UMPV_PROG_ID);
 
     notify_shell_change();
