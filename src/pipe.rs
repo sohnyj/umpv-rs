@@ -53,7 +53,6 @@ pub(crate) fn server_exists() -> bool {
 }
 
 fn connect() -> Result<File, Error> {
-    let pipe_path_wide = encode_wide(path());
     let timeout_at = Instant::now() + CONNECT_TIMEOUT;
 
     loop {
@@ -71,6 +70,7 @@ fn connect() -> Result<File, Error> {
             return Err(Error::ConnectFailed);
         }
         let timeout_milliseconds = u32::try_from(remaining.as_millis()).unwrap_or(u32::MAX);
+        let pipe_path_wide = encode_wide(path());
         unsafe { WaitNamedPipeW(pipe_path_wide.as_ptr(), timeout_milliseconds) };
     }
 }
