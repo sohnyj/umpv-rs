@@ -3,13 +3,6 @@ name = "umpv"
 version = "1.0.1"
 edition = "2024"
 
-[profile.release]
-opt-level = 3
-lto = true
-codegen-units = 1
-panic = "abort"
-strip = true
-
 [dependencies]
 windows-sys = { version = "0.61.2", features = [
     "Win32_Foundation",
@@ -21,3 +14,10 @@ windows-sys = { version = "0.61.2", features = [
     "Win32_UI_WindowsAndMessaging",
 ] }
 windows-registry = "0.6.1"
+
+[profile.release]
+opt-level = 3
+strip = true
+lto = true
+panic = "abort"
+codegen-units = 1
