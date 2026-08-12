@@ -2,11 +2,14 @@ use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::os::windows::fs::OpenOptionsExt;
 use std::os::windows::io::AsRawHandle;
+use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
-use windows_sys::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_PIPE_BUSY};
+use windows_sys::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_PIPE_BUSY, FALSE};
 use windows_sys::Win32::Storage::FileSystem::SECURITY_IDENTIFICATION;
 use windows_sys::Win32::System::Pipes::{GetNamedPipeServerProcessId, WaitNamedPipeW};
+use windows_sys::Win32::System::RemoteDesktop::ProcessIdToSessionId;
+use windows_sys::Win32::System::Threading::GetCurrentProcessId;
 
 use crate::encode_wide;
 
@@ -16,15 +19,26 @@ pub(crate) enum Error {
     WriteFailed,
 }
 
-pub(crate) const PIPE_PATH: &str = r"\\.\pipe\umpv";
-
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+
+fn session_id() -> u32 {
+    let mut session_id: u32 = 0;
+    if unsafe { ProcessIdToSessionId(GetCurrentProcessId(), &raw mut session_id) } == FALSE {
+        return 0;
+    }
+    session_id
+}
+
+pub(crate) fn path() -> &'static str {
+    static PATH: OnceLock<String> = OnceLock::new();
+    PATH.get_or_init(|| format!(r"\\.\pipe\umpv-{}", session_id()))
+}
 
 fn open_pipe() -> std::io::Result<File> {
     OpenOptions::new()
         .write(true)
         .security_qos_flags(SECURITY_IDENTIFICATION)
-        .open(PIPE_PATH)
+        .open(path())
 }
 
 fn error_code(error: &std::io::Error) -> u32 {
@@ -39,7 +53,7 @@ pub(crate) fn server_exists() -> bool {
 }
 
 fn connect() -> Result<File, Error> {
-    let pipe_path_wide = encode_wide(PIPE_PATH);
+    let pipe_path_wide = encode_wide(path());
     let timeout_at = Instant::now() + CONNECT_TIMEOUT;
 
     loop {

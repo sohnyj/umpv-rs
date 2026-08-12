@@ -31,7 +31,7 @@ fn executable_path() -> Option<PathBuf> {
 pub(crate) fn launch(file: &str) -> Result<(), Error> {
     let mpv_path = executable_path().ok_or(Error::UmpvPathUnknown)?;
     let mut mpv_process = Command::new(&mpv_path)
-        .arg(format!("--input-ipc-server={}", pipe::PIPE_PATH))
+        .arg(format!("--input-ipc-server={}", pipe::path()))
         .arg("--")
         .arg(file)
         .creation_flags(CREATE_NEW_PROCESS_GROUP)
