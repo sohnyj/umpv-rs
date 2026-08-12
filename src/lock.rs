@@ -2,8 +2,7 @@ use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
 
 use windows_sys::Win32::Foundation::{FALSE, WAIT_ABANDONED, WAIT_OBJECT_0, WAIT_TIMEOUT};
 use windows_sys::Win32::System::Threading::{CreateMutexW, ReleaseMutex, WaitForSingleObject};
-
-use crate::encode_wide;
+use windows_sys::core::w;
 
 pub(crate) enum Error {
     CreateFailed,
@@ -19,12 +18,11 @@ impl Drop for Guard {
     }
 }
 
-const MUTEX_NAME: &str = r"Local\umpv_lock";
+const MUTEX_NAME: *const u16 = w!(r"Local\umpv_lock");
 const ACQUIRE_TIMEOUT_MILLISECONDS: u32 = 10_000;
 
 pub(crate) fn acquire() -> Result<Guard, Error> {
-    let mutex_name_wide = encode_wide(MUTEX_NAME);
-    let handle = unsafe { CreateMutexW(std::ptr::null(), FALSE, mutex_name_wide.as_ptr()) };
+    let handle = unsafe { CreateMutexW(std::ptr::null(), FALSE, MUTEX_NAME) };
     if handle.is_null() {
         return Err(Error::CreateFailed);
     }

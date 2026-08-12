@@ -9,8 +9,9 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     AllowSetForegroundWindow, FLASHW_ALL, FLASHW_TIMERNOFG, FLASHWINFO, FindWindowExW,
     FlashWindowEx, GetWindowThreadProcessId, IsIconic, SW_RESTORE, SetForegroundWindow, ShowWindow,
 };
+use windows_sys::core::w;
 
-use crate::{encode_wide, pipe};
+use crate::pipe;
 
 pub(crate) enum Error {
     UmpvPathUnknown,
@@ -57,17 +58,16 @@ fn wait_until_ready(mpv_process: &mut Child) -> Result<(), Error> {
     }
 }
 
-const MPV_WINDOW_CLASS_NAME: &str = "mpv";
+const MPV_WINDOW_CLASS_NAME: *const u16 = w!("mpv");
 
 fn find_window(pid: u32) -> Option<HWND> {
-    let class_name_wide = encode_wide(MPV_WINDOW_CLASS_NAME);
     let mut hwnd: HWND = std::ptr::null_mut();
     loop {
         hwnd = unsafe {
             FindWindowExW(
                 std::ptr::null_mut(),
                 hwnd,
-                class_name_wide.as_ptr(),
+                MPV_WINDOW_CLASS_NAME,
                 std::ptr::null(),
             )
         };

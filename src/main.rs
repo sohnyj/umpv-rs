@@ -4,6 +4,7 @@ use std::env;
 use std::process;
 
 use windows_sys::Win32::UI::WindowsAndMessaging::MessageBoxW;
+use windows_sys::core::w;
 
 mod lock;
 mod mpv;
@@ -16,14 +17,8 @@ fn encode_wide(string: &str) -> Vec<u16> {
 
 fn show_message(prefix: &str, text: &str) {
     let text_wide = encode_wide(&format!("{prefix}: {text}"));
-    let caption_wide = encode_wide("umpv");
     unsafe {
-        MessageBoxW(
-            std::ptr::null_mut(),
-            text_wide.as_ptr(),
-            caption_wide.as_ptr(),
-            0,
-        );
+        MessageBoxW(std::ptr::null_mut(), text_wide.as_ptr(), w!("umpv"), 0);
     }
 }
 
