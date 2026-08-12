@@ -85,20 +85,14 @@ fn has_url_scheme(file: &str) -> bool {
 }
 
 fn resolve_file_path(file: &str) -> String {
-    if has_url_scheme(file) {
-        error_exit("URLs are not supported.\numpv opens local files only.");
-    }
     match std::path::absolute(file) {
         Ok(path) => path.to_string_lossy().into_owned(),
         Err(_) => file.to_string(),
     }
 }
 
-fn find_file_path(files: &[String]) -> Option<String> {
-    files
-        .iter()
-        .find(|file| !file.is_empty())
-        .map(|file| resolve_file_path(file))
+fn find_file(files: &[String]) -> Option<&String> {
+    files.iter().find(|file| !file.is_empty())
 }
 
 const DEFAULT_LOADFILE: &str = "replace";
@@ -116,12 +110,12 @@ fn warn_deprecated_loadfile(deprecated: &str, replacement: &str) {
     ));
 }
 
-fn validate_loadfile(loadfile: &str) -> &str {
+fn validate_loadfile(loadfile: &str) -> Option<&str> {
     match loadfile {
-        "replace" | "append" | "append+play" | "insert-next" | "insert-next+play" => loadfile,
-        "append-play" => "append+play",
-        "insert-next-play" => "insert-next+play",
-        _ => error_exit(&format!("Unsupported loadfile flag: {loadfile}")),
+        "replace" | "append" | "append+play" | "insert-next" | "insert-next+play" => Some(loadfile),
+        "append-play" => Some("append+play"),
+        "insert-next-play" => Some("insert-next+play"),
+        _ => None,
     }
 }
 
@@ -185,9 +179,13 @@ fn send_or_launch(mpv_path: &Path, file: &str, loadfile: &str) -> Result<Option<
 }
 
 fn play(files: &[String], loadfile: &str) {
-    let Some(file) = find_file_path(files) else {
+    let Some(file) = find_file(files) else {
         return;
     };
+    if has_url_scheme(file) {
+        error_exit("URLs are not supported.\numpv opens local files only.");
+    }
+    let file = resolve_file_path(file);
     let mpv_path = umpv_path().with_file_name("mpv.exe");
 
     match send_or_launch(&mpv_path, &file, loadfile) {
@@ -219,7 +217,9 @@ fn play(files: &[String], loadfile: &str) {
 fn main() {
     let arguments = split_arguments(env::args().skip(1));
     let requested_loadfile = find_loadfile(&arguments.options);
-    let validated_loadfile = validate_loadfile(requested_loadfile);
+    let Some(validated_loadfile) = validate_loadfile(requested_loadfile) else {
+        error_exit(&format!("Unsupported loadfile flag: {requested_loadfile}"));
+    };
 
     match find_command(&arguments.options) {
         Some(Command::Register) => register(requested_loadfile, validated_loadfile),
