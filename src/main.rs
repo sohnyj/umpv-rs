@@ -1,6 +1,7 @@
 #![windows_subsystem = "windows"]
 
 use std::env;
+use std::path::{Path, PathBuf};
 use std::process;
 
 use windows_sys::Win32::UI::WindowsAndMessaging::MessageBoxW;
@@ -124,16 +125,20 @@ fn validate_loadfile(loadfile: &str) -> &str {
     }
 }
 
+fn umpv_path() -> PathBuf {
+    let Ok(path) = env::current_exe() else {
+        error_exit("Failed to locate umpv.exe.");
+    };
+    path
+}
+
 fn register(requested_loadfile: &str, validated_loadfile: &str) {
     if validated_loadfile != requested_loadfile {
         warn_deprecated_loadfile(requested_loadfile, validated_loadfile);
     }
-    let Ok(umpv_path) = env::current_exe() else {
-        error_exit("Failed to locate umpv.exe.");
-    };
     let command = format!(
         "\"{}\" --loadfile={validated_loadfile} -- \"%L\"",
-        umpv_path.display()
+        umpv_path().display()
     );
 
     match registry::register(&command) {
@@ -166,12 +171,14 @@ enum PlayError {
     WriteFailed,
 }
 
-fn send_or_launch(file: &str, loadfile: &str) -> Result<Option<u32>, PlayError> {
+fn send_or_launch(mpv_path: &Path, file: &str, loadfile: &str) -> Result<Option<u32>, PlayError> {
     let _lock_guard = lock::acquire().map_err(PlayError::Lock)?;
 
     match pipe::send_file(file, loadfile) {
         Ok(pid) => Ok(pid),
-        Err(pipe::Error::NotRunning) => mpv::launch(file).map(|()| None).map_err(PlayError::Mpv),
+        Err(pipe::Error::NotRunning) => mpv::launch(mpv_path, file)
+            .map(|()| None)
+            .map_err(PlayError::Mpv),
         Err(pipe::Error::ConnectFailed) => Err(PlayError::ConnectFailed),
         Err(pipe::Error::WriteFailed) => Err(PlayError::WriteFailed),
     }
@@ -181,8 +188,9 @@ fn play(files: &[String], loadfile: &str) {
     let Some(file) = find_file_path(files) else {
         return;
     };
+    let mpv_path = umpv_path().with_file_name("mpv.exe");
 
-    match send_or_launch(&file, loadfile) {
+    match send_or_launch(&mpv_path, &file, loadfile) {
         Ok(Some(pid)) => mpv::activate_window(pid),
         Ok(None) => {}
         Err(PlayError::Lock(lock::Error::CreateFailed)) => {
@@ -193,9 +201,6 @@ fn play(files: &[String], loadfile: &str) {
         }
         Err(PlayError::Lock(lock::Error::Timeout)) => {
             error_exit("Failed to acquire lock: an mpv instance is not responding.")
-        }
-        Err(PlayError::Mpv(mpv::Error::UmpvPathUnknown)) => {
-            error_exit("Failed to locate umpv.exe.")
         }
         Err(PlayError::Mpv(mpv::Error::SpawnFailed(error))) => {
             error_exit(&format!("Failed to launch mpv.exe: {error}"))

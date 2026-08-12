@@ -1,5 +1,5 @@
 use std::os::windows::process::CommandExt;
-use std::path::PathBuf;
+use std::path::Path;
 use std::process::{Child, Command};
 use std::time::{Duration, Instant};
 
@@ -14,7 +14,6 @@ use windows_sys::core::w;
 use crate::pipe;
 
 pub(crate) enum Error {
-    UmpvPathUnknown,
     SpawnFailed(std::io::Error),
     Exited,
     StartupTimedOut,
@@ -23,15 +22,8 @@ pub(crate) enum Error {
 const START_TIMEOUT: Duration = Duration::from_secs(5);
 const POLL_INTERVAL: Duration = Duration::from_millis(25);
 
-fn executable_path() -> Option<PathBuf> {
-    std::env::current_exe()
-        .ok()
-        .and_then(|exe| exe.parent().map(|directory| directory.join("mpv.exe")))
-}
-
-pub(crate) fn launch(file: &str) -> Result<(), Error> {
-    let mpv_path = executable_path().ok_or(Error::UmpvPathUnknown)?;
-    let mut mpv_process = Command::new(&mpv_path)
+pub(crate) fn launch(mpv_path: &Path, file: &str) -> Result<(), Error> {
+    let mut mpv_process = Command::new(mpv_path)
         .arg(format!("--input-ipc-server={}", pipe::path()))
         .arg("--")
         .arg(file)
