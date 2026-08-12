@@ -17,7 +17,7 @@ windows-sys = { version = "0.61.2", features = [
 windows-registry = "0.6.1"
 
 [profile.release]
-opt-level = 3
+opt-level = "s"
 strip = true
 lto = true
 panic = "abort"
