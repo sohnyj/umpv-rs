@@ -27,7 +27,7 @@ fn show_message(prefix: &str, text: &str) {
     }
 }
 
-fn show_info(text: &str) {
+fn show_information(text: &str) {
     show_message("Info", text);
 }
 
@@ -45,32 +45,59 @@ enum Command {
     Unregister,
 }
 
-fn find_command(args: &[String]) -> Option<Command> {
-    args.iter().find_map(|arg| match arg.as_str() {
+fn find_command(options: &[String]) -> Option<Command> {
+    options.iter().find_map(|option| match option.as_str() {
         "--register" => Some(Command::Register),
         "--unregister" => Some(Command::Unregister),
         _ => None,
     })
 }
 
-fn resolve_file_path(arg: &str) -> String {
-    match std::path::absolute(arg) {
+const OPTION_PREFIX: &str = "--";
+
+struct Arguments {
+    options: Vec<String>,
+    files: Vec<String>,
+}
+
+fn split_arguments(arguments: impl IntoIterator<Item = String>) -> Arguments {
+    let mut options = Vec::new();
+    let mut files = Vec::new();
+    let mut past_end_of_options = false;
+
+    for argument in arguments {
+        if past_end_of_options || !argument.starts_with(OPTION_PREFIX) {
+            files.push(argument);
+        } else if argument == OPTION_PREFIX {
+            past_end_of_options = true;
+        } else {
+            options.push(argument);
+        }
+    }
+
+    Arguments { options, files }
+}
+
+fn resolve_file_path(file: &str) -> String {
+    match std::path::absolute(file) {
         Ok(path) => path.to_string_lossy().into_owned(),
-        Err(_) => arg.to_string(),
+        Err(_) => file.to_string(),
     }
 }
 
-fn find_file_argument(args: &[String]) -> Option<String> {
-    args.iter()
-        .find(|arg| !arg.is_empty() && !arg.starts_with("--"))
-        .map(|arg| resolve_file_path(arg))
+fn find_file_path(files: &[String]) -> Option<String> {
+    files
+        .iter()
+        .find(|file| !file.is_empty())
+        .map(|file| resolve_file_path(file))
 }
 
 const DEFAULT_LOADFILE: &str = "replace";
 
-fn find_loadfile(args: &[String]) -> &str {
-    args.iter()
-        .find_map(|arg| arg.strip_prefix("--loadfile="))
+fn find_loadfile(options: &[String]) -> &str {
+    options
+        .iter()
+        .find_map(|option| option.strip_prefix("--loadfile="))
         .unwrap_or(DEFAULT_LOADFILE)
 }
 
@@ -89,21 +116,21 @@ fn validate_loadfile(loadfile: &str) -> &str {
     }
 }
 
-fn register(requested_loadfile: &str, loadfile: &str) {
-    if loadfile != requested_loadfile {
-        warn_deprecated_loadfile(requested_loadfile, loadfile);
+fn register(requested_loadfile: &str, validated_loadfile: &str) {
+    if validated_loadfile != requested_loadfile {
+        warn_deprecated_loadfile(requested_loadfile, validated_loadfile);
     }
     let Ok(umpv_path) = env::current_exe() else {
         error_exit("Failed to locate umpv.exe.");
     };
     let command = format!(
-        "\"{}\" --loadfile={loadfile} -- \"%L\"",
+        "\"{}\" --loadfile={validated_loadfile} -- \"%L\"",
         umpv_path.display()
     );
 
     match registry::register(&command) {
-        Ok(count) => show_info(&format!(
-            "umpv registered for {count} file extension(s).\nloadfile: {loadfile}"
+        Ok(count) => show_information(&format!(
+            "umpv registered for {count} file extension(s).\nloadfile: {validated_loadfile}"
         )),
         Err(registry::Error::NoAssociations) => {
             error_exit("No mpv file associations found.\nRun 'mpv.exe --register' first.")
@@ -119,13 +146,13 @@ fn register(requested_loadfile: &str, loadfile: &str) {
 
 fn unregister() {
     match registry::unregister() {
-        0 => show_info("Nothing to unregister."),
-        count => show_info(&format!("umpv unregistered for {count} file extension(s).")),
+        0 => show_information("Nothing to unregister."),
+        count => show_information(&format!("umpv unregistered for {count} file extension(s).")),
     }
 }
 
-fn play(args: &[String], loadfile: &str) {
-    let Some(file) = find_file_argument(args) else {
+fn play(files: &[String], loadfile: &str) {
+    let Some(file) = find_file_path(files) else {
         return;
     };
 
@@ -152,13 +179,13 @@ fn play(args: &[String], loadfile: &str) {
 }
 
 fn main() {
-    let args: Vec<String> = env::args().skip(1).collect();
-    let requested_loadfile = find_loadfile(&args);
-    let loadfile = validate_loadfile(requested_loadfile);
+    let arguments = split_arguments(env::args().skip(1));
+    let requested_loadfile = find_loadfile(&arguments.options);
+    let validated_loadfile = validate_loadfile(requested_loadfile);
 
-    match find_command(&args) {
-        Some(Command::Register) => register(requested_loadfile, loadfile),
+    match find_command(&arguments.options) {
+        Some(Command::Register) => register(requested_loadfile, validated_loadfile),
         Some(Command::Unregister) => unregister(),
-        None => play(&args, loadfile),
+        None => play(&arguments.files, validated_loadfile),
     }
 }
