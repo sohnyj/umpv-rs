@@ -97,9 +97,6 @@ fn flash_window(hwnd: HWND) {
 }
 
 pub(crate) fn activate_window(pid: u32) {
-    if pid == 0 {
-        return;
-    }
     unsafe { AllowSetForegroundWindow(pid) };
     let Some(hwnd) = find_window(pid) else {
         return;

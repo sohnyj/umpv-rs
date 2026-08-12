@@ -170,7 +170,7 @@ fn send_or_launch(file: &str, loadfile: &str) -> Result<Option<u32>, PlayError> 
     let _lock_guard = lock::acquire().map_err(PlayError::Lock)?;
 
     match pipe::send_file(file, loadfile) {
-        Ok(pid) => Ok(Some(pid)),
+        Ok(pid) => Ok(pid),
         Err(pipe::Error::NotRunning) => mpv::launch(file).map(|()| None).map_err(PlayError::Mpv),
         Err(pipe::Error::ConnectFailed) => Err(PlayError::ConnectFailed),
         Err(pipe::Error::WriteFailed) => Err(PlayError::WriteFailed),

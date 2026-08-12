@@ -75,10 +75,12 @@ fn connect() -> Result<File, Error> {
     }
 }
 
-fn server_pid(pipe: &File) -> u32 {
+fn server_pid(pipe: &File) -> Option<u32> {
     let mut pid: u32 = 0;
-    unsafe { GetNamedPipeServerProcessId(pipe.as_raw_handle(), &raw mut pid) };
-    pid
+    if unsafe { GetNamedPipeServerProcessId(pipe.as_raw_handle(), &raw mut pid) } == FALSE {
+        return None;
+    }
+    Some(pid)
 }
 
 fn loadfile_command(file: &str, loadfile: &str) -> String {
@@ -89,7 +91,7 @@ fn loadfile_command(file: &str, loadfile: &str) -> String {
     format!("raw loadfile \"{escaped}\" {loadfile}\n")
 }
 
-pub(crate) fn send_file(file: &str, loadfile: &str) -> Result<u32, Error> {
+pub(crate) fn send_file(file: &str, loadfile: &str) -> Result<Option<u32>, Error> {
     let mut pipe = connect()?;
     let pid = server_pid(&pipe);
     pipe.write_all(loadfile_command(file, loadfile).as_bytes())
