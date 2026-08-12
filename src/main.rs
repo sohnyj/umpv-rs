@@ -78,7 +78,20 @@ fn split_arguments(arguments: impl IntoIterator<Item = String>) -> Arguments {
     Arguments { options, files }
 }
 
+fn has_url_scheme(file: &str) -> bool {
+    let Some((scheme, _)) = file.split_once("://") else {
+        return false;
+    };
+    scheme.starts_with(|character: char| character.is_ascii_alphabetic())
+        && scheme.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '+' | '-' | '.')
+        })
+}
+
 fn resolve_file_path(file: &str) -> String {
+    if has_url_scheme(file) {
+        error_exit("URLs are not supported.\numpv opens local files only.");
+    }
     match std::path::absolute(file) {
         Ok(path) => path.to_string_lossy().into_owned(),
         Err(_) => file.to_string(),
