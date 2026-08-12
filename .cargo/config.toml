@@ -3,14 +3,9 @@ target = "x86_64-pc-windows-msvc"
 
 [target.x86_64-pc-windows-msvc]
 rustflags = [
-    "-C",
-    "target-cpu=x86-64-v3",
-    "-C",
-    "link-arg=delayimp.lib",
-    "-C",
-    "link-arg=/DELAYLOAD:advapi32.dll",
-    "-C",
-    "link-arg=/DELAYLOAD:shell32.dll",
-    "-C",
-    "link-arg=/DELAYLOAD:user32.dll",
+    "-C", "target-cpu=x86-64-v3",
+    "-C", "link-arg=delayimp.lib",
+    "-C", "link-arg=/DELAYLOAD:advapi32.dll",
+    "-C", "link-arg=/DELAYLOAD:shell32.dll",
+    "-C", "link-arg=/DELAYLOAD:user32.dll",
 ]
