@@ -100,11 +100,11 @@ fn find_loadfile(options: &[String]) -> &str {
         .unwrap_or(DEFAULT_LOADFILE)
 }
 
-fn validate_loadfile(loadfile: &str) -> Option<&str> {
-    match loadfile {
-        "replace" | "append" | "append+play" | "insert-next" | "insert-next+play" => Some(loadfile),
-        _ => None,
-    }
+fn is_supported_loadfile(loadfile: &str) -> bool {
+    matches!(
+        loadfile,
+        "replace" | "append" | "append+play" | "insert-next" | "insert-next+play"
+    )
 }
 
 fn umpv_path() -> PathBuf {
@@ -114,15 +114,15 @@ fn umpv_path() -> PathBuf {
     path
 }
 
-fn register(validated_loadfile: &str) {
+fn register(loadfile: &str) {
     let command = format!(
-        "\"{}\" --loadfile={validated_loadfile} -- \"%L\"",
+        "\"{}\" --loadfile={loadfile} -- \"%L\"",
         umpv_path().display()
     );
 
     match registry::register(&command) {
         Ok(count) => show_information(&format!(
-            "umpv registered for {count} file extension(s).\nloadfile: {validated_loadfile}"
+            "umpv registered for {count} file extension(s).\nloadfile: {loadfile}"
         )),
         Err(registry::Error::NoAssociations) => {
             error_exit("No mpv file associations found.\nRun 'mpv.exe --register' first.")
@@ -201,14 +201,14 @@ fn play(files: &[String], loadfile: &str) {
 
 fn main() {
     let arguments = split_arguments(env::args().skip(1));
-    let requested_loadfile = find_loadfile(&arguments.options);
-    let Some(validated_loadfile) = validate_loadfile(requested_loadfile) else {
-        error_exit(&format!("Unsupported loadfile flag: {requested_loadfile}"));
-    };
+    let loadfile = find_loadfile(&arguments.options);
+    if !is_supported_loadfile(loadfile) {
+        error_exit(&format!("Unsupported loadfile flag: {loadfile}"));
+    }
 
     match find_command(&arguments.options) {
-        Some(Command::Register) => register(validated_loadfile),
+        Some(Command::Register) => register(loadfile),
         Some(Command::Unregister) => unregister(),
-        None => play(&arguments.files, validated_loadfile),
+        None => play(&arguments.files, loadfile),
     }
 }
