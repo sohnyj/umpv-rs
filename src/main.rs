@@ -103,8 +103,6 @@ fn find_loadfile(options: &[String]) -> &str {
 fn validate_loadfile(loadfile: &str) -> Option<&str> {
     match loadfile {
         "replace" | "append" | "append+play" | "insert-next" | "insert-next+play" => Some(loadfile),
-        "append-play" => Some("append+play"),
-        "insert-next-play" => Some("insert-next+play"),
         _ => None,
     }
 }

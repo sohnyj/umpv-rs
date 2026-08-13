@@ -51,7 +51,7 @@ Points the extensions back at mpv. Defaults set by other applications are not re
 | `insert-next` | Insert after the current item |
 | `insert-next+play` | Insert after the current item, and force playback to start |
 
-`append-play` and `insert-next-play`, deprecated since mpv 0.42, are accepted and rewritten to their `+play` form. `insert-at` and `insert-at+play` are not supported, as umpv alone cannot determine the playlist index. See the [mpv documentation](https://mpv.io/manual/master/#command-interface-[%3Coptions%3E]]]) for the full list.
+`append-play` and `insert-next-play`, deprecated since mpv 0.42, are not accepted; use their `+play` form. `insert-at` and `insert-at+play` are not supported, as umpv alone cannot determine the playlist index. See the [mpv documentation](https://mpv.io/manual/master/#command-interface-[%3Coptions%3E]]]) for the full list.
 
 ## Cross-compiling
 
