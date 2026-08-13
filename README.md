@@ -1,6 +1,6 @@
 # umpv-rs
 
-A single-instance mpv launcher for Windows, written in Rust. Opens files in a running mpv window via named pipe IPC, or launches a new instance if none is running.
+A single-instance mpv launcher for Windows. Opens files in a running mpv window via named pipe IPC, or launches a new instance if none is running.
 
 ## Minimum Requirements
 
@@ -53,23 +53,19 @@ Points the extensions back at mpv. Defaults set by other applications are not re
 
 `insert-at` and `insert-at+play` are not supported, as umpv alone cannot determine the playlist index. See the [mpv documentation](https://mpv.io/manual/master/#command-interface-[%3Coptions%3E]]]) for the full list.
 
-## Cross-compiling
+## Building
 
-umpv is built from Linux (including WSL) for the `x86_64-pc-windows-msvc` target. CI uses the same toolchain ([build.yml](.github/workflows/build.yml)).
+umpv is built from Linux (including WSL) for the `x86_64-pc-windows-msvc` target.
 
 ```bash
-# Host C toolchain for build scripts, plus llvm-rc (icon resource) and lld-link (linker)
 sudo apt-get install -y build-essential llvm clang lld
 
-# Rust with the Windows target
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source ~/.cargo/env
 rustup target add x86_64-pc-windows-msvc
 
-# cargo-xwin, which downloads the MSVC CRT and Windows SDK on first build
 cargo install cargo-xwin
 
-# Build
 cargo xwin build --release
 ```
 
