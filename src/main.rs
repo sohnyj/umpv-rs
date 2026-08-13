@@ -27,10 +27,6 @@ fn show_information(text: &str) {
     show_message("Info", text);
 }
 
-fn show_warning(text: &str) {
-    show_message("Warning", text);
-}
-
 fn error_exit(text: &str) -> ! {
     show_message("Error", text);
     process::exit(1);
@@ -104,12 +100,6 @@ fn find_loadfile(options: &[String]) -> &str {
         .unwrap_or(DEFAULT_LOADFILE)
 }
 
-fn warn_deprecated_loadfile(deprecated: &str, replacement: &str) {
-    show_warning(&format!(
-        "'{deprecated}' is deprecated since mpv 0.42.\nUsing '{replacement}' instead."
-    ));
-}
-
 fn validate_loadfile(loadfile: &str) -> Option<&str> {
     match loadfile {
         "replace" | "append" | "append+play" | "insert-next" | "insert-next+play" => Some(loadfile),
@@ -126,10 +116,7 @@ fn umpv_path() -> PathBuf {
     path
 }
 
-fn register(requested_loadfile: &str, validated_loadfile: &str) {
-    if validated_loadfile != requested_loadfile {
-        warn_deprecated_loadfile(requested_loadfile, validated_loadfile);
-    }
+fn register(validated_loadfile: &str) {
     let command = format!(
         "\"{}\" --loadfile={validated_loadfile} -- \"%L\"",
         umpv_path().display()
@@ -222,7 +209,7 @@ fn main() {
     };
 
     match find_command(&arguments.options) {
-        Some(Command::Register) => register(requested_loadfile, validated_loadfile),
+        Some(Command::Register) => register(validated_loadfile),
         Some(Command::Unregister) => unregister(),
         None => play(&arguments.files, validated_loadfile),
     }
