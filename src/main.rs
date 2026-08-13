@@ -17,7 +17,7 @@ fn encode_wide(string: &str) -> Vec<u16> {
 }
 
 fn show_message(prefix: &str, text: &str) {
-    let text_wide = encode_wide(&format!("{prefix}: {text}"));
+    let text_wide = encode_wide(&format!("{prefix}\n{text}"));
     unsafe {
         MessageBoxW(std::ptr::null_mut(), text_wide.as_ptr(), w!("umpv"), 0);
     }
