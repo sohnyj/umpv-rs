@@ -6,8 +6,8 @@ use std::time::{Duration, Instant};
 use windows_sys::Win32::Foundation::{FALSE, HWND};
 use windows_sys::Win32::System::Threading::CREATE_NEW_PROCESS_GROUP;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    AllowSetForegroundWindow, FLASHW_ALL, FLASHW_TIMERNOFG, FLASHWINFO, FindWindowExW,
-    FlashWindowEx, GetWindowThreadProcessId, IsIconic, SW_RESTORE, SetForegroundWindow, ShowWindow,
+    AllowSetForegroundWindow, FindWindowExW, GetWindowThreadProcessId, IsIconic, SW_RESTORE,
+    SetForegroundWindow, ShowWindow,
 };
 use windows_sys::core::w;
 
@@ -74,20 +74,6 @@ fn find_window(pid: u32) -> Option<HWND> {
     }
 }
 
-fn flash_window(hwnd: HWND) {
-    let Ok(size) = u32::try_from(size_of::<FLASHWINFO>()) else {
-        return;
-    };
-    let flash_window_information = FLASHWINFO {
-        cbSize: size,
-        hwnd,
-        dwFlags: FLASHW_ALL | FLASHW_TIMERNOFG,
-        uCount: 0,
-        dwTimeout: 0,
-    };
-    unsafe { FlashWindowEx(&raw const flash_window_information) };
-}
-
 pub(crate) fn activate_window(pid: u32) {
     unsafe { AllowSetForegroundWindow(pid) };
     let Some(hwnd) = find_window(pid) else {
@@ -96,7 +82,5 @@ pub(crate) fn activate_window(pid: u32) {
     if unsafe { IsIconic(hwnd) } != FALSE {
         unsafe { ShowWindow(hwnd, SW_RESTORE) };
     }
-    if unsafe { SetForegroundWindow(hwnd) } == FALSE {
-        flash_window(hwnd);
-    }
+    unsafe { SetForegroundWindow(hwnd) };
 }
