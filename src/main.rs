@@ -122,7 +122,7 @@ fn register(loadfile: &str) {
 
     match registry::register(&command) {
         Ok(count) => show_information(&format!(
-            "umpv registered for {count} file extension(s).\nloadfile: {loadfile}"
+            "Registered for {count} file extension(s).\nloadfile: {loadfile}"
         )),
         Err(registry::Error::NoAssociations) => {
             error_exit("No mpv file associations found.\nRun 'mpv.exe --register' first.")
@@ -139,7 +139,7 @@ fn register(loadfile: &str) {
 fn unregister() {
     match registry::unregister() {
         0 => show_information("Nothing to unregister."),
-        count => show_information(&format!("umpv unregistered for {count} file extension(s).")),
+        count => show_information(&format!("Unregistered for {count} file extension(s).")),
     }
 }
 
@@ -168,7 +168,7 @@ fn play(files: &[String], loadfile: &str) {
         return;
     };
     if has_url_scheme(file) {
-        error_exit("URLs are not supported.\numpv opens local files only.");
+        error_exit("URLs are not supported.\nOnly local files can be opened.");
     }
     let file = resolve_file_path(file);
     let mpv_path = umpv_path().with_file_name("mpv.exe");
