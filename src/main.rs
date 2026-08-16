@@ -155,7 +155,7 @@ fn send_or_launch(mpv_path: &Path, file: &str, loadfile: &str) -> Result<Option<
 
     match pipe::send_file(file, loadfile) {
         Ok(pid) => Ok(pid),
-        Err(pipe::Error::NotRunning) => mpv::launch(mpv_path, file)
+        Err(pipe::Error::NoServer) => mpv::launch(mpv_path, file)
             .map(|()| None)
             .map_err(PlayError::Mpv),
         Err(pipe::Error::ConnectFailed) => Err(PlayError::ConnectFailed),

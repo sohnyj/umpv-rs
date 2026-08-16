@@ -14,7 +14,7 @@ use windows_sys::Win32::System::Threading::GetCurrentProcessId;
 use crate::encode_wide;
 
 pub(crate) enum Error {
-    NotRunning,
+    NoServer,
     ConnectFailed,
     WriteFailed,
 }
@@ -59,7 +59,7 @@ fn connect() -> Result<File, Error> {
         match open_pipe() {
             Ok(pipe) => return Ok(pipe),
             Err(error) => match error_code(&error) {
-                ERROR_FILE_NOT_FOUND => return Err(Error::NotRunning),
+                ERROR_FILE_NOT_FOUND => return Err(Error::NoServer),
                 ERROR_PIPE_BUSY => {}
                 _ => return Err(Error::ConnectFailed),
             },
