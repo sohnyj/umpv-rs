@@ -19,7 +19,7 @@ pub(crate) enum Error {
     StartupTimedOut,
 }
 
-const START_TIMEOUT: Duration = Duration::from_secs(5);
+const STARTUP_TIMEOUT: Duration = Duration::from_secs(5);
 const POLL_INTERVAL: Duration = Duration::from_millis(25);
 
 pub(crate) fn launch(mpv_path: &Path, file: &str) -> Result<(), Error> {
@@ -35,7 +35,7 @@ pub(crate) fn launch(mpv_path: &Path, file: &str) -> Result<(), Error> {
 }
 
 fn wait_until_ready(mpv_process: &mut Child) -> Result<(), Error> {
-    let timeout_at = Instant::now() + START_TIMEOUT;
+    let timeout_at = Instant::now() + STARTUP_TIMEOUT;
     loop {
         if pipe::server_exists() {
             return Ok(());

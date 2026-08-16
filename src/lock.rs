@@ -7,7 +7,7 @@ use windows_sys::core::w;
 pub(crate) enum Error {
     CreateFailed,
     WaitFailed,
-    Timeout,
+    TimedOut,
 }
 
 pub(crate) struct Guard(OwnedHandle);
@@ -30,7 +30,7 @@ pub(crate) fn acquire() -> Result<Guard, Error> {
 
     match unsafe { WaitForSingleObject(mutex.as_raw_handle(), ACQUIRE_TIMEOUT_MILLISECONDS) } {
         WAIT_OBJECT_0 | WAIT_ABANDONED => Ok(Guard(mutex)),
-        WAIT_TIMEOUT => Err(Error::Timeout),
+        WAIT_TIMEOUT => Err(Error::TimedOut),
         _ => Err(Error::WaitFailed),
     }
 }
