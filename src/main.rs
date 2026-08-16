@@ -1,7 +1,7 @@
 #![windows_subsystem = "windows"]
 
 use std::env;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process;
 
 use windows_sys::Win32::UI::WindowsAndMessaging::MessageBoxW;
@@ -151,14 +151,17 @@ enum PlayError {
     WriteFailed,
 }
 
-fn send_or_launch(mpv_path: &Path, file: &str, loadfile: &str) -> Result<Option<u32>, PlayError> {
+fn send_or_launch(file: &str, loadfile: &str) -> Result<Option<u32>, PlayError> {
     let _lock_guard = lock::acquire().map_err(PlayError::Lock)?;
 
     match pipe::send_file(file, loadfile) {
         Ok(pid) => Ok(pid),
-        Err(pipe::Error::NoServer) => mpv::launch(mpv_path, file)
-            .map(|()| None)
-            .map_err(PlayError::Mpv),
+        Err(pipe::Error::NoServer) => {
+            let mpv_path = umpv_path().with_file_name("mpv.exe");
+            mpv::launch(&mpv_path, file)
+                .map(|()| None)
+                .map_err(PlayError::Mpv)
+        }
         Err(pipe::Error::ConnectFailed) => Err(PlayError::ConnectFailed),
         Err(pipe::Error::WriteFailed) => Err(PlayError::WriteFailed),
     }
@@ -172,9 +175,8 @@ fn play(files: &[String], loadfile: &str) {
         error_exit("URLs are not supported.\nOnly local files can be opened.");
     }
     let file = resolve_file_path(file);
-    let mpv_path = umpv_path().with_file_name("mpv.exe");
 
-    match send_or_launch(&mpv_path, &file, loadfile) {
+    match send_or_launch(&file, loadfile) {
         Ok(Some(pid)) => mpv::activate_window(pid),
         Ok(None) => {}
         Err(PlayError::Lock(lock::Error::CreateFailed)) => {
