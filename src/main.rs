@@ -91,12 +91,13 @@ fn find_file(files: &[String]) -> Option<&String> {
     files.iter().find(|file| !file.is_empty())
 }
 
+const LOADFILE_OPTION_PREFIX: &str = "--loadfile=";
 const DEFAULT_LOADFILE: &str = "replace";
 
 fn find_loadfile(options: &[String]) -> &str {
     options
         .iter()
-        .find_map(|option| option.strip_prefix("--loadfile="))
+        .find_map(|option| option.strip_prefix(LOADFILE_OPTION_PREFIX))
         .unwrap_or(DEFAULT_LOADFILE)
 }
 
@@ -116,7 +117,7 @@ fn umpv_path() -> PathBuf {
 
 fn register(loadfile: &str) {
     let command = format!(
-        "\"{}\" --loadfile={loadfile} -- \"%L\"",
+        "\"{}\" {LOADFILE_OPTION_PREFIX}{loadfile} -- \"%L\"",
         umpv_path().display()
     );
 
