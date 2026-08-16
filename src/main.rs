@@ -183,7 +183,7 @@ fn play(files: &[String], loadfile: &str) {
             error_exit("Failed to wait for the umpv lock.")
         }
         Err(PlayError::Lock(lock::Error::TimedOut)) => {
-            error_exit("Failed to acquire lock: an mpv instance is not responding.")
+            error_exit("Timed out waiting for the umpv lock.\nAnother umpv instance is holding it.")
         }
         Err(PlayError::Mpv(mpv::Error::SpawnFailed(error))) => {
             error_exit(&format!("Failed to launch mpv.exe: {error}"))
