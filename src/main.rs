@@ -180,10 +180,10 @@ fn play(files: &[String], loadfile: &str) {
             error_exit("Failed to create umpv lock.")
         }
         Err(PlayError::Lock(lock::Error::WaitFailed)) => {
-            error_exit("Failed to wait for the umpv lock.")
+            error_exit("Failed to wait for umpv lock.")
         }
         Err(PlayError::Lock(lock::Error::TimedOut)) => {
-            error_exit("Timed out waiting for the umpv lock.\nAnother umpv instance is holding it.")
+            error_exit("Timed out waiting for umpv lock.\nAnother umpv instance is holding it.")
         }
         Err(PlayError::Mpv(mpv::Error::SpawnFailed(error))) => {
             error_exit(&format!("Failed to launch mpv.exe: {error}"))
