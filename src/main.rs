@@ -70,8 +70,8 @@ fn split_arguments(arguments: impl IntoIterator<Item = String>) -> Arguments {
     Arguments { options, files }
 }
 
-fn has_url_scheme(file: &str) -> bool {
-    let Some((scheme, _)) = file.split_once("://") else {
+fn has_url_scheme(argument: &str) -> bool {
+    let Some((scheme, _)) = argument.split_once("://") else {
         return false;
     };
     scheme.starts_with(|character: char| character.is_ascii_alphabetic())
