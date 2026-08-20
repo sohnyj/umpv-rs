@@ -90,8 +90,10 @@ pub(crate) fn unregister() -> usize {
     } else {
         set_associations(umpv_extensions, MPV_PROG_ID)
     };
-    let _ = CURRENT_USER.remove_tree(SUBKEY_UMPV_PROG_ID);
+    let removed_prog_id = CURRENT_USER.remove_tree(SUBKEY_UMPV_PROG_ID).is_ok();
 
-    notify_shell_change();
+    if count > 0 || removed_prog_id {
+        notify_shell_change();
+    }
     count
 }
