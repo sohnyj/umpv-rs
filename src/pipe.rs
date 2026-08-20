@@ -2,7 +2,7 @@ use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::os::windows::fs::OpenOptionsExt;
 use std::os::windows::io::AsRawHandle;
-use std::sync::OnceLock;
+use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
 use windows_sys::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_PIPE_BUSY, FALSE};
@@ -30,8 +30,8 @@ fn session_id() -> u32 {
 }
 
 pub(crate) fn path() -> &'static str {
-    static PATH: OnceLock<String> = OnceLock::new();
-    PATH.get_or_init(|| format!(r"\\.\pipe\umpv-{}", session_id()))
+    static PATH: LazyLock<String> = LazyLock::new(|| format!(r"\\.\pipe\umpv-{}", session_id()));
+    &PATH
 }
 
 fn open_pipe() -> std::io::Result<File> {
