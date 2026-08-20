@@ -37,12 +37,27 @@ enum Command {
     Unregister,
 }
 
-fn find_command(options: &[String]) -> Option<Command> {
-    options.iter().find_map(|option| match option.as_str() {
+fn parse_command(option: &str) -> Option<Command> {
+    match option {
         "--register" => Some(Command::Register),
         "--unregister" => Some(Command::Unregister),
         _ => None,
-    })
+    }
+}
+
+fn find_command(options: &[String]) -> Option<Command> {
+    options.iter().find_map(|option| parse_command(option))
+}
+
+fn is_known_option(option: &str) -> bool {
+    parse_command(option).is_some() || option.starts_with(LOADFILE_OPTION_PREFIX)
+}
+
+fn find_unknown_option(options: &[String]) -> Option<&str> {
+    options
+        .iter()
+        .map(String::as_str)
+        .find(|option| !is_known_option(option))
 }
 
 const OPTION_PREFIX: &str = "--";
@@ -208,6 +223,9 @@ fn play(files: &[String], loadfile_flags: &str) {
 
 fn main() {
     let arguments = split_arguments(env::args().skip(1));
+    if let Some(option) = find_unknown_option(&arguments.options) {
+        error_exit(&format!("Unknown option: {option}"));
+    }
     let loadfile_flags = find_loadfile_flags(&arguments.options);
     if !is_supported_loadfile_flags(loadfile_flags) {
         error_exit(&format!("Unsupported loadfile flags: {loadfile_flags}"));
