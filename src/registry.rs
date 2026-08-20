@@ -1,4 +1,4 @@
-use windows_registry::{CURRENT_USER, Type};
+use windows_registry::CURRENT_USER;
 use windows_sys::Win32::UI::Shell::{SHCNE_ASSOCCHANGED, SHCNF_IDLIST, SHChangeNotify};
 
 pub(crate) enum Error {
@@ -32,10 +32,7 @@ fn read_associations() -> Vec<(String, String)> {
     };
     values
         .filter(|(name, _)| name.starts_with('.') && name.len() > 1)
-        .filter_map(|(name, value)| match value.ty() {
-            Type::String => Some((name, String::try_from(value).ok()?)),
-            _ => None,
-        })
+        .filter_map(|(name, value)| Some((name, String::try_from(value).ok()?)))
         .collect()
 }
 
@@ -47,7 +44,7 @@ fn write_prog_id(command: &str) -> windows_registry::Result<()> {
         .set_string("", command)
 }
 
-fn set_associations(extensions: impl IntoIterator<Item = impl AsRef<str>>, prog_id: &str) -> usize {
+fn set_associations<'a>(extensions: impl IntoIterator<Item = &'a str>, prog_id: &str) -> usize {
     let Ok(key) = CURRENT_USER.create(SUBKEY_FILE_ASSOCIATIONS) else {
         return 0;
     };
@@ -69,7 +66,7 @@ pub(crate) fn register(command: &str) -> Result<usize, Error> {
     write_prog_id(command).map_err(|_| Error::ProgIdWriteFailed)?;
 
     let count = set_associations(
-        associations.iter().map(|(extension, _)| extension),
+        associations.iter().map(|(extension, _)| extension.as_str()),
         UMPV_PROG_ID,
     );
     if count == 0 {
@@ -82,10 +79,10 @@ pub(crate) fn register(command: &str) -> Result<usize, Error> {
 
 pub(crate) fn unregister() -> usize {
     let associations = read_associations();
-    let umpv_extensions: Vec<&String> = associations
+    let umpv_extensions: Vec<&str> = associations
         .iter()
         .filter(|(_, prog_id)| prog_id == UMPV_PROG_ID)
-        .map(|(extension, _)| extension)
+        .map(|(extension, _)| extension.as_str())
         .collect();
 
     let count = if umpv_extensions.is_empty() {

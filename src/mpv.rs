@@ -31,10 +31,10 @@ pub(crate) fn launch(mpv_path: &Path, file: &str) -> Result<(), Error> {
         .spawn()
         .map_err(Error::SpawnFailed)?;
     unsafe { AllowSetForegroundWindow(mpv_process.id()) };
-    wait_until_ready(&mut mpv_process)
+    wait_for_ipc_server(&mut mpv_process)
 }
 
-fn wait_until_ready(mpv_process: &mut Child) -> Result<(), Error> {
+fn wait_for_ipc_server(mpv_process: &mut Child) -> Result<(), Error> {
     let timeout_at = Instant::now() + STARTUP_TIMEOUT;
     loop {
         if pipe::server_exists() {

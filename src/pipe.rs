@@ -24,7 +24,7 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 fn session_id() -> u32 {
     let mut session_id: u32 = 0;
     if unsafe { ProcessIdToSessionId(GetCurrentProcessId(), &raw mut session_id) } == FALSE {
-        return 0;
+        crate::error_exit("Failed to determine the session id.");
     }
     session_id
 }
@@ -41,14 +41,14 @@ fn open_pipe() -> std::io::Result<File> {
         .open(path())
 }
 
-fn error_code(error: &std::io::Error) -> u32 {
-    error.raw_os_error().unwrap_or_default().cast_unsigned()
+fn error_code(error: &std::io::Error) -> Option<u32> {
+    error.raw_os_error().map(i32::cast_unsigned)
 }
 
 pub(crate) fn server_exists() -> bool {
     match open_pipe() {
         Ok(_) => true,
-        Err(error) => error_code(&error) == ERROR_PIPE_BUSY,
+        Err(error) => error_code(&error) == Some(ERROR_PIPE_BUSY),
     }
 }
 
@@ -59,8 +59,8 @@ fn connect() -> Result<File, Error> {
         match open_pipe() {
             Ok(pipe) => return Ok(pipe),
             Err(error) => match error_code(&error) {
-                ERROR_FILE_NOT_FOUND => return Err(Error::NoServer),
-                ERROR_PIPE_BUSY => {}
+                Some(ERROR_FILE_NOT_FOUND) => return Err(Error::NoServer),
+                Some(ERROR_PIPE_BUSY) => {}
                 _ => return Err(Error::ConnectFailed),
             },
         }
@@ -83,18 +83,18 @@ fn server_pid(pipe: &File) -> Option<u32> {
     Some(pid)
 }
 
-fn loadfile_command(file: &str, loadfile: &str) -> String {
+fn loadfile_command(file: &str, loadfile_flags: &str) -> String {
     let escaped = file
         .replace('\\', r"\\")
         .replace('"', "\\\"")
         .replace('\n', "\\n");
-    format!("raw loadfile \"{escaped}\" {loadfile}\n")
+    format!("raw loadfile \"{escaped}\" {loadfile_flags}\n")
 }
 
-pub(crate) fn send_file(file: &str, loadfile: &str) -> Result<Option<u32>, Error> {
+pub(crate) fn send_file(file: &str, loadfile_flags: &str) -> Result<Option<u32>, Error> {
     let mut pipe = connect()?;
     let pid = server_pid(&pipe);
-    pipe.write_all(loadfile_command(file, loadfile).as_bytes())
+    pipe.write_all(loadfile_command(file, loadfile_flags).as_bytes())
         .map_err(|_| Error::WriteFailed)?;
     Ok(pid)
 }

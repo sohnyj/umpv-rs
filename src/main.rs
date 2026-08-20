@@ -16,8 +16,8 @@ fn encode_wide(string: &str) -> Vec<u16> {
     string.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
-fn show_message(prefix: &str, text: &str) {
-    let text_wide = encode_wide(&format!("{prefix}\n{text}"));
+fn show_message(heading: &str, text: &str) {
+    let text_wide = encode_wide(&format!("{heading}\n{text}"));
     unsafe {
         MessageBoxW(std::ptr::null_mut(), text_wide.as_ptr(), w!("umpv"), 0);
     }
@@ -46,6 +46,7 @@ fn find_command(options: &[String]) -> Option<Command> {
 }
 
 const OPTION_PREFIX: &str = "--";
+const END_OF_OPTIONS: &str = "--";
 
 struct Arguments {
     options: Vec<String>,
@@ -60,7 +61,7 @@ fn split_arguments(arguments: impl IntoIterator<Item = String>) -> Arguments {
     for argument in arguments {
         if past_end_of_options || !argument.starts_with(OPTION_PREFIX) {
             files.push(argument);
-        } else if argument == OPTION_PREFIX {
+        } else if argument == END_OF_OPTIONS {
             past_end_of_options = true;
         } else {
             options.push(argument);
@@ -80,30 +81,33 @@ fn has_url_scheme(argument: &str) -> bool {
         })
 }
 
-fn resolve_file_path(file: &str) -> String {
+fn absolute_file_path(file: &str) -> String {
     match std::path::absolute(file) {
         Ok(path) => path.to_string_lossy().into_owned(),
-        Err(_) => file.to_string(),
+        Err(error) => error_exit(&format!("Failed to make the file path absolute: {error}")),
     }
 }
 
-fn find_file(files: &[String]) -> Option<&String> {
-    files.iter().find(|file| !file.is_empty())
+fn first_file(files: &[String]) -> Option<&str> {
+    files
+        .iter()
+        .map(String::as_str)
+        .find(|file| !file.is_empty())
 }
 
 const LOADFILE_OPTION_PREFIX: &str = "--loadfile=";
-const DEFAULT_LOADFILE: &str = "replace";
+const DEFAULT_LOADFILE_FLAGS: &str = "replace";
 
-fn find_loadfile(options: &[String]) -> &str {
+fn find_loadfile_flags(options: &[String]) -> &str {
     options
         .iter()
         .find_map(|option| option.strip_prefix(LOADFILE_OPTION_PREFIX))
-        .unwrap_or(DEFAULT_LOADFILE)
+        .unwrap_or(DEFAULT_LOADFILE_FLAGS)
 }
 
-fn is_supported_loadfile(loadfile: &str) -> bool {
+fn is_supported_loadfile_flags(loadfile_flags: &str) -> bool {
     matches!(
-        loadfile,
+        loadfile_flags,
         "replace" | "append" | "append+play" | "insert-next" | "insert-next+play"
     )
 }
@@ -115,15 +119,15 @@ fn umpv_path() -> PathBuf {
     path
 }
 
-fn register(loadfile: &str) {
+fn register(loadfile_flags: &str) {
     let command = format!(
-        "\"{}\" {LOADFILE_OPTION_PREFIX}{loadfile} -- \"%L\"",
+        "\"{}\" {LOADFILE_OPTION_PREFIX}{loadfile_flags} -- \"%L\"",
         umpv_path().display()
     );
 
     match registry::register(&command) {
         Ok(count) => show_information(&format!(
-            "Registered for {count} file extension(s).\nloadfile: {loadfile}"
+            "Registered for {count} file extension(s).\nloadfile: {loadfile_flags}"
         )),
         Err(registry::Error::NoAssociations) => {
             error_exit("No mpv file associations found.\nRun 'mpv.exe --register' first.")
@@ -151,10 +155,10 @@ enum PlayError {
     WriteFailed,
 }
 
-fn send_or_launch(file: &str, loadfile: &str) -> Result<Option<u32>, PlayError> {
+fn send_or_launch(file: &str, loadfile_flags: &str) -> Result<Option<u32>, PlayError> {
     let _lock_guard = lock::acquire().map_err(PlayError::Lock)?;
 
-    match pipe::send_file(file, loadfile) {
+    match pipe::send_file(file, loadfile_flags) {
         Ok(pid) => Ok(pid),
         Err(pipe::Error::NoServer) => {
             let mpv_path = umpv_path().with_file_name("mpv.exe");
@@ -167,16 +171,16 @@ fn send_or_launch(file: &str, loadfile: &str) -> Result<Option<u32>, PlayError> 
     }
 }
 
-fn play(files: &[String], loadfile: &str) {
-    let Some(file) = find_file(files) else {
+fn play(files: &[String], loadfile_flags: &str) {
+    let Some(file) = first_file(files) else {
         return;
     };
     if has_url_scheme(file) {
         error_exit("URLs are not supported.\nOnly local files can be opened.");
     }
-    let file = resolve_file_path(file);
+    let file = absolute_file_path(file);
 
-    match send_or_launch(&file, loadfile) {
+    match send_or_launch(&file, loadfile_flags) {
         Ok(Some(pid)) => mpv::activate_window(pid),
         Ok(None) => {}
         Err(PlayError::Lock(lock::Error::CreateFailed)) => {
@@ -204,14 +208,14 @@ fn play(files: &[String], loadfile: &str) {
 
 fn main() {
     let arguments = split_arguments(env::args().skip(1));
-    let loadfile = find_loadfile(&arguments.options);
-    if !is_supported_loadfile(loadfile) {
-        error_exit(&format!("Unsupported loadfile flag: {loadfile}"));
+    let loadfile_flags = find_loadfile_flags(&arguments.options);
+    if !is_supported_loadfile_flags(loadfile_flags) {
+        error_exit(&format!("Unsupported loadfile flags: {loadfile_flags}"));
     }
 
     match find_command(&arguments.options) {
-        Some(Command::Register) => register(loadfile),
+        Some(Command::Register) => register(loadfile_flags),
         Some(Command::Unregister) => unregister(),
-        None => play(&arguments.files, loadfile),
+        None => play(&arguments.files, loadfile_flags),
     }
 }
