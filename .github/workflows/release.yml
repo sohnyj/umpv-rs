@@ -3,10 +3,10 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
-      append_hash:
-        description: "Append short commit hash to the tag (e.g. v0.n.n-b2298b8)"
+      upload_release:
+        description: "Upload to GitHub release"
         type: boolean
-        default: false
+        default: true
 
 permissions:
   contents: write
@@ -24,11 +24,7 @@ jobs:
         id: version
         run: |
           version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
-          if [ "${{ inputs.append_hash }}" = "true" ]; then
-            echo "tag=v${version}-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=v${version}" >> "$GITHUB_OUTPUT"
-          fi
+          echo "tag=v${version}" >> "$GITHUB_OUTPUT"
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -48,7 +44,16 @@ jobs:
         working-directory: target/x86_64-pc-windows-msvc/release
         run: 7z a -mx=9 ${{ github.workspace }}/umpv-rs.7z umpv.exe
 
+      - name: Upload artifact
+        if: ${{ !inputs.upload_release }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: umpv
+          path: umpv-rs.7z
+          retention-days: 1
+
       - name: Remove existing release/tag if it already exists
+        if: inputs.upload_release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}
@@ -64,6 +69,7 @@ jobs:
           fi
 
       - name: Build release notes from commit log
+        if: inputs.upload_release
         run: |
           PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
           if [ -n "$PREV_TAG" ]; then
@@ -77,6 +83,7 @@ jobs:
           cat RELEASE_NOTES.md
 
       - name: Publish to GitHub Release
+        if: inputs.upload_release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
