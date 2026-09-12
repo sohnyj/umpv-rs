@@ -7,10 +7,28 @@ pub(crate) enum Error {
     NoExtensionsRegistered,
 }
 
+impl std::fmt::Display for Error {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::NoAssociations => {
+                "No mpv file associations found.\nRun 'mpv.exe --register' first."
+            }
+            Self::ProgIdWriteFailed => "Failed to write umpv ProgID to registry.",
+            Self::NoExtensionsRegistered => "Failed to register any file associations.",
+        })
+    }
+}
+
 const SUBKEY_FILE_ASSOCIATIONS: &str = r"Software\Clients\Media\mpv\Capabilities\FileAssociations";
-const SUBKEY_UMPV_PROG_ID: &str = r"Software\Classes\io.mpv.umpv";
+const SUBKEY_CLASSES: &str = r"Software\Classes";
 const UMPV_PROG_ID: &str = "io.mpv.umpv";
 const MPV_PROG_ID: &str = "io.mpv.file";
+/// Name of a registry key's unnamed default value.
+const DEFAULT_VALUE_NAME: &str = "";
+
+fn umpv_prog_id_subkey() -> String {
+    format!(r"{SUBKEY_CLASSES}\{UMPV_PROG_ID}")
+}
 
 fn notify_shell_change() {
     unsafe {
@@ -47,11 +65,11 @@ fn read_associations() -> Vec<FileAssociation> {
 }
 
 fn write_prog_id(command: &str) -> windows_registry::Result<()> {
-    let prog_id_key = CURRENT_USER.create(SUBKEY_UMPV_PROG_ID)?;
-    prog_id_key.set_string("", "")?;
+    let prog_id_key = CURRENT_USER.create(umpv_prog_id_subkey())?;
+    prog_id_key.set_string(DEFAULT_VALUE_NAME, "")?;
     prog_id_key
         .create(r"shell\open\command")?
-        .set_string("", command)
+        .set_string(DEFAULT_VALUE_NAME, command)
 }
 
 fn set_associations<'a>(extensions: impl IntoIterator<Item = &'a str>, prog_id: &str) -> usize {
@@ -93,9 +111,14 @@ pub(crate) fn register(command: &str) -> Result<usize, Error> {
     Ok(extension_count)
 }
 
-pub(crate) struct Unregistered {
-    pub(crate) extension_count: usize,
-    pub(crate) removed_prog_id: bool,
+/// Outcome of taking umpv out of the registry.
+pub(crate) enum Unregistered {
+    /// Neither a file extension nor a ProgID was pointing at umpv.
+    Nothing,
+    /// Only a leftover ProgID was removed; no file extension pointed at umpv.
+    ProgIdOnly,
+    /// The given number of file extensions were handed back to mpv.
+    Extensions(usize),
 }
 
 pub(crate) fn unregister() -> Unregistered {
@@ -107,13 +130,14 @@ pub(crate) fn unregister() -> Unregistered {
             .map(|association| association.extension.as_str()),
         MPV_PROG_ID,
     );
-    let removed_prog_id = CURRENT_USER.remove_tree(SUBKEY_UMPV_PROG_ID).is_ok();
+    let removed_prog_id = CURRENT_USER.remove_tree(umpv_prog_id_subkey()).is_ok();
 
     if extension_count > 0 || removed_prog_id {
         notify_shell_change();
     }
-    Unregistered {
-        extension_count,
-        removed_prog_id,
+    match (extension_count, removed_prog_id) {
+        (0, false) => Unregistered::Nothing,
+        (0, true) => Unregistered::ProgIdOnly,
+        _ => Unregistered::Extensions(extension_count),
     }
 }

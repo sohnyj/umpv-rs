@@ -11,7 +11,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 };
 use windows_sys::core::w;
 
-use crate::pipe;
+use crate::pipe::Pipe;
 
 pub(crate) enum Error {
     SpawnFailed(std::io::Error),
@@ -20,24 +20,35 @@ pub(crate) enum Error {
     StartupTimedOut,
 }
 
+impl std::fmt::Display for Error {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::SpawnFailed(error) => write!(formatter, "Failed to launch mpv.exe: {error}"),
+            Self::Exited => formatter.write_str("mpv.exe exited before it opened the file."),
+            Self::WaitFailed => formatter.write_str("Failed to wait for mpv.exe."),
+            Self::StartupTimedOut => formatter.write_str("Timed out waiting for mpv.exe to start."),
+        }
+    }
+}
+
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(5);
 const POLL_INTERVAL_MILLISECONDS: u32 = 5;
 
-pub(crate) fn launch(mpv_path: &Path, file: &str) -> Result<(), Error> {
+pub(crate) fn launch(mpv_path: &Path, pipe: &Pipe, file: &str) -> Result<(), Error> {
     let mpv_process = Command::new(mpv_path)
-        .arg(format!("--input-ipc-server={}", pipe::path()))
+        .arg(format!("--input-ipc-server={}", pipe.path()))
         .arg("--")
         .arg(file)
         .spawn()
         .map_err(Error::SpawnFailed)?;
     unsafe { AllowSetForegroundWindow(mpv_process.id()) };
-    wait_for_ipc_server(&mpv_process)
+    wait_for_ipc_server(pipe, &mpv_process)
 }
 
-fn wait_for_ipc_server(mpv_process: &Child) -> Result<(), Error> {
+fn wait_for_ipc_server(pipe: &Pipe, mpv_process: &Child) -> Result<(), Error> {
     let timeout_at = Instant::now() + STARTUP_TIMEOUT;
     loop {
-        if pipe::server_exists() {
+        if pipe.server_exists() {
             return Ok(());
         }
         if Instant::now() >= timeout_at {

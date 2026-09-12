@@ -1,6 +1,7 @@
 #![windows_subsystem = "windows"]
 
 use std::env;
+use std::fmt;
 use std::path::PathBuf;
 use std::process;
 
@@ -23,11 +24,11 @@ fn show_message(text: &str) {
     }
 }
 
-fn show_information(text: &str) {
+fn show_information(text: impl fmt::Display) {
     show_message(&format!("Info\n{text}"));
 }
 
-fn error_exit(text: &str) -> ! {
+fn error_exit(text: impl fmt::Display) -> ! {
     show_message(&format!("Error\n{text}"));
     process::exit(1);
 }
@@ -37,36 +38,58 @@ enum Command {
     Unregister,
 }
 
-fn parse_command(option: &str) -> Option<Command> {
+enum CommandLineOption {
+    Command(Command),
+    Loadfile(String),
+}
+
+const LOADFILE_OPTION_PREFIX: &str = "--loadfile=";
+const SUPPORTED_LOADFILE_FLAGS: [&str; 5] = [
+    "replace",
+    "append",
+    "append+play",
+    "insert-next",
+    "insert-next+play",
+];
+const DEFAULT_LOADFILE_FLAGS: &str = SUPPORTED_LOADFILE_FLAGS[0];
+
+fn parse_option(option: &str) -> Option<CommandLineOption> {
     match option {
-        "--register" => Some(Command::Register),
-        "--unregister" => Some(Command::Unregister),
-        _ => None,
+        "--register" => Some(CommandLineOption::Command(Command::Register)),
+        "--unregister" => Some(CommandLineOption::Command(Command::Unregister)),
+        _ => option
+            .strip_prefix(LOADFILE_OPTION_PREFIX)
+            .map(|loadfile_flags| CommandLineOption::Loadfile(loadfile_flags.to_owned())),
     }
 }
 
-fn find_command(options: &[String]) -> Option<Command> {
-    options.iter().find_map(|option| parse_command(option))
+enum ArgumentError {
+    UnknownOption(String),
+    UnsupportedLoadfileFlags(String),
 }
 
-fn is_known_option(option: &str) -> bool {
-    parse_command(option).is_some() || option.starts_with(LOADFILE_OPTION_PREFIX)
-}
-
-fn find_unknown_option(options: &[String]) -> Option<&str> {
-    options
-        .iter()
-        .map(String::as_str)
-        .find(|option| !is_known_option(option))
+impl fmt::Display for ArgumentError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::UnknownOption(option) => write!(formatter, "Unknown option: {option}"),
+            Self::UnsupportedLoadfileFlags(loadfile_flags) => {
+                write!(formatter, "Unsupported loadfile flags: {loadfile_flags}")
+            }
+        }
+    }
 }
 
 struct Arguments {
-    options: Vec<String>,
+    command: Option<Command>,
+    loadfile_flags: String,
     files: Vec<String>,
 }
 
-fn split_arguments(arguments: impl IntoIterator<Item = String>) -> Arguments {
-    let mut options = Vec::new();
+fn parse_arguments(
+    arguments: impl IntoIterator<Item = String>,
+) -> Result<Arguments, ArgumentError> {
+    let mut command = None;
+    let mut loadfile_flags = None;
     let mut files = Vec::new();
     let mut past_end_of_options = false;
 
@@ -76,11 +99,26 @@ fn split_arguments(arguments: impl IntoIterator<Item = String>) -> Arguments {
         } else if argument == "--" {
             past_end_of_options = true;
         } else {
-            options.push(argument);
+            match parse_option(&argument) {
+                Some(CommandLineOption::Command(parsed)) => command = command.or(Some(parsed)),
+                Some(CommandLineOption::Loadfile(parsed)) => {
+                    loadfile_flags = loadfile_flags.or(Some(parsed));
+                }
+                None => return Err(ArgumentError::UnknownOption(argument)),
+            }
         }
     }
 
-    Arguments { options, files }
+    let loadfile_flags = loadfile_flags.unwrap_or_else(|| DEFAULT_LOADFILE_FLAGS.to_owned());
+    if !SUPPORTED_LOADFILE_FLAGS.contains(&loadfile_flags.as_str()) {
+        return Err(ArgumentError::UnsupportedLoadfileFlags(loadfile_flags));
+    }
+
+    Ok(Arguments {
+        command,
+        loadfile_flags,
+        files,
+    })
 }
 
 fn has_url_scheme(argument: &str) -> bool {
@@ -96,25 +134,8 @@ fn has_url_scheme(argument: &str) -> bool {
 fn absolute_file_path(file: &str) -> String {
     match std::path::absolute(file) {
         Ok(path) => path.to_string_lossy().into_owned(),
-        Err(error) => error_exit(&format!("Failed to make the file path absolute: {error}")),
+        Err(error) => error_exit(format!("Failed to make the file path absolute: {error}")),
     }
-}
-
-const LOADFILE_OPTION_PREFIX: &str = "--loadfile=";
-const DEFAULT_LOADFILE_FLAGS: &str = "replace";
-
-fn loadfile_flags_or_default(options: &[String]) -> &str {
-    options
-        .iter()
-        .find_map(|option| option.strip_prefix(LOADFILE_OPTION_PREFIX))
-        .unwrap_or(DEFAULT_LOADFILE_FLAGS)
-}
-
-fn is_supported_loadfile_flags(loadfile_flags: &str) -> bool {
-    matches!(
-        loadfile_flags,
-        "replace" | "append" | "append+play" | "insert-next" | "insert-next+play"
-    )
 }
 
 fn umpv_path() -> PathBuf {
@@ -124,76 +145,68 @@ fn umpv_path() -> PathBuf {
     path
 }
 
-fn register(loadfile_flags: &str) {
-    let command = format!(
+/// mpv is expected to sit next to umpv.
+fn mpv_path() -> PathBuf {
+    umpv_path().with_file_name("mpv.exe")
+}
+
+/// The shell open command that hands a picked file (`%L`) to this umpv.
+fn umpv_command_line(loadfile_flags: &str) -> String {
+    format!(
         "\"{}\" {LOADFILE_OPTION_PREFIX}{loadfile_flags} -- \"%L\"",
         umpv_path().display()
-    );
+    )
+}
 
-    match registry::register(&command) {
-        Ok(extension_count) => show_information(&format!(
+fn register(loadfile_flags: &str) {
+    match registry::register(&umpv_command_line(loadfile_flags)) {
+        Ok(extension_count) => show_information(format!(
             "Registered for {extension_count} file extension(s).\nloadfile: {loadfile_flags}"
         )),
-        Err(registry::Error::NoAssociations) => {
-            error_exit("No mpv file associations found.\nRun 'mpv.exe --register' first.")
-        }
-        Err(registry::Error::ProgIdWriteFailed) => {
-            error_exit("Failed to write umpv ProgID to registry.")
-        }
-        Err(registry::Error::NoExtensionsRegistered) => {
-            error_exit("Failed to register any file associations.")
-        }
+        Err(error) => error_exit(error),
     }
 }
 
 fn unregister() {
-    let registry::Unregistered {
-        extension_count,
-        removed_prog_id,
-    } = registry::unregister();
-
-    match (extension_count, removed_prog_id) {
-        (0, false) => show_information("Nothing to unregister."),
-        (0, true) => {
+    match registry::unregister() {
+        registry::Unregistered::Nothing => show_information("Nothing to unregister."),
+        registry::Unregistered::ProgIdOnly => {
             show_information("Removed the umpv ProgID.\nNo file extensions were pointing at umpv.")
         }
-        _ => show_information(&format!(
+        registry::Unregistered::Extensions(extension_count) => show_information(format!(
             "Unregistered for {extension_count} file extension(s)."
         )),
     }
 }
 
-fn launch_mpv(file: &str) {
-    let mpv_path = umpv_path().with_file_name("mpv.exe");
-    match mpv::launch(&mpv_path, file) {
-        Ok(()) => {}
-        Err(mpv::Error::SpawnFailed(error)) => {
-            error_exit(&format!("Failed to launch mpv.exe: {error}"))
-        }
-        Err(mpv::Error::Exited) => error_exit("mpv.exe exited before it opened the file."),
-        Err(mpv::Error::WaitFailed) => error_exit("Failed to wait for mpv.exe."),
-        Err(mpv::Error::StartupTimedOut) => error_exit("Timed out waiting for mpv.exe to start."),
+fn launch_mpv(pipe: &pipe::Pipe, file: &str) {
+    if let Err(error) = mpv::launch(&mpv_path(), pipe, file) {
+        error_exit(error);
     }
 }
 
-fn open_in_mpv(file: &str, loadfile_flags: &str) -> Option<u32> {
+/// How a file reached mpv.
+enum Opened {
+    /// An already running mpv instance accepted the file. Its process id is
+    /// absent when that instance could not be identified.
+    Existing { server_pid: Option<u32> },
+    /// A new mpv instance was launched for the file.
+    Launched,
+}
+
+fn open_in_mpv(pipe: &pipe::Pipe, file: &str, loadfile_flags: &str) -> Opened {
     let _lock_guard = match lock::acquire() {
         Ok(guard) => guard,
-        Err(lock::Error::CreateFailed) => error_exit("Failed to create umpv lock."),
-        Err(lock::Error::WaitFailed) => error_exit("Failed to wait for umpv lock."),
-        Err(lock::Error::TimedOut) => {
-            error_exit("Timed out waiting for umpv lock.\nAnother umpv instance is holding it.")
-        }
+        Err(error) => error_exit(error),
     };
 
-    match pipe::send_loadfile(file, loadfile_flags) {
-        Ok(pid) => pid,
-        Err(pipe::Error::NoServer) => {
-            launch_mpv(file);
-            None
+    match pipe.send_loadfile(file, loadfile_flags) {
+        Ok(pipe::Sent::Delivered { server_pid }) => Opened::Existing { server_pid },
+        Ok(pipe::Sent::NoServer) => {
+            launch_mpv(pipe, file);
+            Opened::Launched
         }
-        Err(pipe::Error::ConnectFailed) => error_exit("Failed to connect to mpv."),
-        Err(pipe::Error::WriteFailed) => error_exit("Failed to send the file to mpv."),
+        Err(error) => error_exit(error),
     }
 }
 
@@ -206,24 +219,28 @@ fn open(files: &[String], loadfile_flags: &str) {
     }
     let file = absolute_file_path(file);
 
-    if let Some(pid) = open_in_mpv(&file, loadfile_flags) {
-        mpv::activate_window(pid);
+    let pipe = match pipe::Pipe::for_current_session() {
+        Ok(pipe) => pipe,
+        Err(error) => error_exit(error),
+    };
+
+    if let Opened::Existing {
+        server_pid: Some(server_pid),
+    } = open_in_mpv(&pipe, &file, loadfile_flags)
+    {
+        mpv::activate_window(server_pid);
     }
 }
 
 fn main() {
-    let arguments = split_arguments(env::args().skip(1));
-    if let Some(option) = find_unknown_option(&arguments.options) {
-        error_exit(&format!("Unknown option: {option}"));
-    }
-    let loadfile_flags = loadfile_flags_or_default(&arguments.options);
-    if !is_supported_loadfile_flags(loadfile_flags) {
-        error_exit(&format!("Unsupported loadfile flags: {loadfile_flags}"));
-    }
+    let arguments = match parse_arguments(env::args().skip(1)) {
+        Ok(arguments) => arguments,
+        Err(error) => error_exit(error),
+    };
 
-    match find_command(&arguments.options) {
-        Some(Command::Register) => register(loadfile_flags),
+    match arguments.command {
+        Some(Command::Register) => register(&arguments.loadfile_flags),
         Some(Command::Unregister) => unregister(),
-        None => open(&arguments.files, loadfile_flags),
+        None => open(&arguments.files, &arguments.loadfile_flags),
     }
 }

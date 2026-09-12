@@ -10,6 +10,18 @@ pub(crate) enum Error {
     TimedOut,
 }
 
+impl std::fmt::Display for Error {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::CreateFailed => "Failed to create umpv lock.",
+            Self::WaitFailed => "Failed to wait for umpv lock.",
+            Self::TimedOut => {
+                "Timed out waiting for umpv lock.\nAnother umpv instance is holding it."
+            }
+        })
+    }
+}
+
 pub(crate) struct Guard(OwnedHandle);
 
 impl Drop for Guard {
@@ -19,6 +31,10 @@ impl Drop for Guard {
 }
 
 const MUTEX_NAME: *const u16 = w!(r"Local\umpv_lock");
+// Bounds the longest run a lock holder can make: waiting for a free pipe
+// instance (`pipe::CONNECT_TIMEOUT`) and then, if no server turned up, waiting
+// for a freshly launched mpv to listen (`mpv::STARTUP_TIMEOUT`). Keep this at
+// or above the sum of those two, or a waiter can give up on a healthy holder.
 const ACQUIRE_TIMEOUT_MILLISECONDS: u32 = 10_000;
 
 pub(crate) fn acquire() -> Result<Guard, Error> {
