@@ -111,14 +111,10 @@ pub(crate) fn register(command: &str) -> Result<usize, Error> {
     Ok(extension_count)
 }
 
-/// Outcome of taking umpv out of the registry.
 pub(crate) enum Unregistered {
-    /// Neither a file extension nor a ProgID was pointing at umpv.
     Nothing,
-    /// Only a leftover ProgID was removed; no file extension pointed at umpv.
     ProgIdOnly,
-    /// The given number of file extensions were handed back to mpv.
-    Extensions(usize),
+    ExtensionsRestored(usize),
 }
 
 pub(crate) fn unregister() -> Unregistered {
@@ -138,6 +134,6 @@ pub(crate) fn unregister() -> Unregistered {
     match (extension_count, removed_prog_id) {
         (0, false) => Unregistered::Nothing,
         (0, true) => Unregistered::ProgIdOnly,
-        _ => Unregistered::Extensions(extension_count),
+        _ => Unregistered::ExtensionsRestored(extension_count),
     }
 }

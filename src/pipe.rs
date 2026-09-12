@@ -32,12 +32,11 @@ impl std::fmt::Display for Error {
     }
 }
 
-/// Outcome of handing a file to the mpv IPC server.
-pub(crate) enum Sent {
-    /// A running mpv instance accepted the file. Its process id is absent when
-    /// the pipe would not report it.
-    Delivered { server_pid: Option<u32> },
-    /// No mpv instance is listening on the pipe.
+pub(crate) enum SendOutcome {
+    /// `server_pid` is absent when querying it failed.
+    Sent {
+        server_pid: Option<u32>,
+    },
     NoServer,
 }
 
@@ -72,7 +71,6 @@ fn loadfile_command(file: &str, loadfile_flags: &str) -> String {
     format!("raw loadfile \"{escaped}\" {loadfile_flags}\n")
 }
 
-/// The mpv IPC pipe of the current session, resolved once at start-up.
 pub(crate) struct Pipe {
     path: String,
     path_wide: Vec<u16>,
@@ -96,19 +94,19 @@ impl Pipe {
         error_code(&std::io::Error::last_os_error()) == Some(ERROR_SEM_TIMEOUT)
     }
 
-    fn open(&self) -> std::io::Result<File> {
+    fn open_stream(&self) -> std::io::Result<File> {
         OpenOptions::new()
             .write(true)
             .security_qos_flags(SECURITY_IDENTIFICATION)
             .open(&self.path)
     }
 
-    /// Connects to the server, or returns `None` when no server is listening.
+    /// `Ok(None)` when no server is listening.
     fn connect(&self) -> Result<Option<File>, Error> {
         let timeout_at = Instant::now() + CONNECT_TIMEOUT;
 
         loop {
-            match self.open() {
+            match self.open_stream() {
                 Ok(stream) => return Ok(Some(stream)),
                 Err(error) => match error_code(&error) {
                     Some(ERROR_FILE_NOT_FOUND) => return Ok(None),
@@ -123,14 +121,18 @@ impl Pipe {
         }
     }
 
-    pub(crate) fn send_loadfile(&self, file: &str, loadfile_flags: &str) -> Result<Sent, Error> {
+    pub(crate) fn send_loadfile(
+        &self,
+        file: &str,
+        loadfile_flags: &str,
+    ) -> Result<SendOutcome, Error> {
         let Some(mut stream) = self.connect()? else {
-            return Ok(Sent::NoServer);
+            return Ok(SendOutcome::NoServer);
         };
         let server_pid = server_pid(&stream);
         stream
             .write_all(loadfile_command(file, loadfile_flags).as_bytes())
             .map_err(|_| Error::WriteFailed)?;
-        Ok(Sent::Delivered { server_pid })
+        Ok(SendOutcome::Sent { server_pid })
     }
 }

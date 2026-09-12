@@ -9,7 +9,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     AllowSetForegroundWindow, FindWindowExW, GetWindowThreadProcessId, IsIconic, SW_RESTORE,
     SetForegroundWindow, ShowWindow,
 };
-use windows_sys::core::w;
+use windows_sys::core::{PCWSTR, w};
 
 use crate::pipe::Pipe;
 
@@ -64,7 +64,7 @@ fn wait_for_ipc_server(pipe: &Pipe, mpv_process: &Child) -> Result<(), Error> {
     }
 }
 
-const MPV_WINDOW_CLASS_NAME: *const u16 = w!("mpv");
+const MPV_WINDOW_CLASS_NAME: PCWSTR = w!("mpv");
 
 fn find_window(pid: u32) -> Option<HWND> {
     let mut hwnd: HWND = std::ptr::null_mut();
