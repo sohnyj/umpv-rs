@@ -24,12 +24,8 @@ fn show_message(text: &str) {
     }
 }
 
-fn show_information(text: &dyn fmt::Display) {
-    show_message(&format!("Info\n{text}"));
-}
-
 fn error_exit(error: &dyn fmt::Display) -> ! {
-    show_message(&format!("Error\n{error}"));
+    show_message(&error.to_string());
     process::exit(1);
 }
 
@@ -175,7 +171,7 @@ fn shell_open_command(loadfile_flags: &str) -> String {
 
 fn register(loadfile_flags: &str) {
     match registry::register(&shell_open_command(loadfile_flags)) {
-        Ok(extension_count) => show_information(&format!(
+        Ok(extension_count) => show_message(&format!(
             "Registered for {extension_count} file extension(s).\nloadfile: {loadfile_flags}"
         )),
         Err(error) => error_exit(&error),
@@ -184,11 +180,11 @@ fn register(loadfile_flags: &str) {
 
 fn unregister() {
     match registry::unregister() {
-        registry::Unregistered::Nothing => show_information(&"Nothing to unregister."),
+        registry::Unregistered::Nothing => show_message("Nothing to unregister."),
         registry::Unregistered::ProgIdOnly => {
-            show_information(&"Removed the umpv ProgID.\nNo file extensions were pointing at umpv.")
+            show_message("Removed the umpv ProgID.\nNo file extensions were pointing at umpv.")
         }
-        registry::Unregistered::ExtensionsRestored(extension_count) => show_information(&format!(
+        registry::Unregistered::ExtensionsRestored(extension_count) => show_message(&format!(
             "Unregistered for {extension_count} file extension(s)."
         )),
     }
