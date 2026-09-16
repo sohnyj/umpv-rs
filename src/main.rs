@@ -36,7 +36,7 @@ enum Mode {
 
 enum CommandLineOption {
     Mode(Mode),
-    Loadfile(String),
+    Loadfile(&'static str),
 }
 
 const LOADFILE_OPTION_PREFIX: &str = "--loadfile=";
@@ -49,21 +49,23 @@ const SUPPORTED_LOADFILE_FLAGS: &[&str] = &[
 ];
 const DEFAULT_LOADFILE_FLAGS: &str = SUPPORTED_LOADFILE_FLAGS[0];
 
-fn parse_option(option: &str) -> Option<CommandLineOption> {
-    match option {
-        "--register" => Some(CommandLineOption::Mode(Mode::Register)),
-        "--unregister" => Some(CommandLineOption::Mode(Mode::Unregister)),
-        _ => option
-            .strip_prefix(LOADFILE_OPTION_PREFIX)
-            .map(|loadfile_flags| CommandLineOption::Loadfile(loadfile_flags.to_owned())),
-    }
-}
-
-fn supported_loadfile_flags(given: &str) -> Option<&'static str> {
+fn supported_loadfile_flags(given: &str) -> Result<&'static str, ArgumentError> {
     SUPPORTED_LOADFILE_FLAGS
         .iter()
         .copied()
         .find(|supported| *supported == given)
+        .ok_or_else(|| ArgumentError::UnsupportedLoadfileFlags(given.to_owned()))
+}
+
+fn parse_option(option: &str) -> Result<CommandLineOption, ArgumentError> {
+    match option {
+        "--register" => Ok(CommandLineOption::Mode(Mode::Register)),
+        "--unregister" => Ok(CommandLineOption::Mode(Mode::Unregister)),
+        _ => match option.strip_prefix(LOADFILE_OPTION_PREFIX) {
+            Some(given) => supported_loadfile_flags(given).map(CommandLineOption::Loadfile),
+            None => Err(ArgumentError::UnknownOption(option.to_owned())),
+        },
+    }
 }
 
 enum ArgumentError {
@@ -88,46 +90,40 @@ enum Command {
     },
     Unregister,
     Open {
-        files: Vec<String>,
+        /// The shell passes one file per invocation; extra files are ignored.
+        file: Option<String>,
         loadfile_flags: &'static str,
     },
 }
 
 fn parse_arguments(arguments: impl IntoIterator<Item = String>) -> Result<Command, ArgumentError> {
     let mut mode = None;
-    let mut given_loadfile_flags = None;
-    let mut files = Vec::new();
+    let mut loadfile_flags = None;
+    let mut file = None;
     let mut past_end_of_options = false;
 
     for argument in arguments {
         if past_end_of_options || !argument.starts_with("--") {
-            files.push(argument);
+            file = file.or(Some(argument));
         } else if argument == "--" {
             past_end_of_options = true;
         } else {
-            match parse_option(&argument) {
-                Some(CommandLineOption::Mode(parsed)) => mode = mode.or(Some(parsed)),
-                Some(CommandLineOption::Loadfile(parsed)) => {
-                    given_loadfile_flags = given_loadfile_flags.or(Some(parsed));
+            match parse_option(&argument)? {
+                CommandLineOption::Mode(parsed) => mode = mode.or(Some(parsed)),
+                CommandLineOption::Loadfile(parsed) => {
+                    loadfile_flags = loadfile_flags.or(Some(parsed));
                 }
-                None => return Err(ArgumentError::UnknownOption(argument)),
             }
         }
     }
 
-    let loadfile_flags = match given_loadfile_flags {
-        Some(given) => match supported_loadfile_flags(&given) {
-            Some(supported) => supported,
-            None => return Err(ArgumentError::UnsupportedLoadfileFlags(given)),
-        },
-        None => DEFAULT_LOADFILE_FLAGS,
-    };
+    let loadfile_flags = loadfile_flags.unwrap_or(DEFAULT_LOADFILE_FLAGS);
 
     Ok(match mode {
         Some(Mode::Register) => Command::Register { loadfile_flags },
         Some(Mode::Unregister) => Command::Unregister,
         None => Command::Open {
-            files,
+            file,
             loadfile_flags,
         },
     })
@@ -143,9 +139,9 @@ fn has_url_scheme(argument: &str) -> bool {
         })
 }
 
-fn absolute_file_path(file: &str) -> String {
-    match std::path::absolute(file) {
-        Ok(path) => path.to_string_lossy().into_owned(),
+fn make_absolute(path: &str) -> String {
+    match std::path::absolute(path) {
+        Ok(absolute_path) => absolute_path.to_string_lossy().into_owned(),
         Err(error) => error_exit(&format!("Failed to make the file path absolute: {error}")),
     }
 }
@@ -196,8 +192,8 @@ fn launch_mpv(pipe: &pipe::Pipe, file: &str) {
     }
 }
 
-/// `None` when there is no window to activate: a newly launched mpv raises its
-/// own, and an unidentified running instance cannot be located.
+/// `None` when nothing needs raising: a new mpv raises its own window, and an
+/// unidentified instance cannot be found.
 fn open_in_mpv(pipe: &pipe::Pipe, file: &str, loadfile_flags: &str) -> Option<u32> {
     let _lock_guard = match lock::acquire() {
         Ok(guard) => guard,
@@ -214,14 +210,14 @@ fn open_in_mpv(pipe: &pipe::Pipe, file: &str, loadfile_flags: &str) -> Option<u3
     }
 }
 
-fn open(files: &[String], loadfile_flags: &str) {
-    let Some(file) = files.first() else {
+fn open(file: Option<&str>, loadfile_flags: &str) {
+    let Some(file) = file else {
         return;
     };
     if has_url_scheme(file) {
         error_exit(&"URLs are not supported.\nOnly local files can be opened.");
     }
-    let file = absolute_file_path(file);
+    let file = make_absolute(file);
 
     let pipe = match pipe::Pipe::for_current_session() {
         Ok(pipe) => pipe,
@@ -238,9 +234,9 @@ fn main() {
         Ok(Command::Register { loadfile_flags }) => register(loadfile_flags),
         Ok(Command::Unregister) => unregister(),
         Ok(Command::Open {
-            files,
+            file,
             loadfile_flags,
-        }) => open(&files, loadfile_flags),
+        }) => open(file.as_deref(), loadfile_flags),
         Err(error) => error_exit(&error),
     }
 }

@@ -23,7 +23,7 @@ const SUBKEY_FILE_ASSOCIATIONS: &str = r"Software\Clients\Media\mpv\Capabilities
 const SUBKEY_CLASSES: &str = r"Software\Classes";
 const UMPV_PROG_ID: &str = "io.mpv.umpv";
 const MPV_PROG_ID: &str = "io.mpv.file";
-/// Name of a registry key's unnamed default value.
+/// A registry key's unnamed default value.
 const DEFAULT_VALUE_NAME: &str = "";
 
 fn umpv_prog_id_subkey() -> String {
@@ -64,15 +64,19 @@ fn read_associations() -> Vec<FileAssociation> {
         .collect()
 }
 
-fn write_prog_id(command: &str) -> windows_registry::Result<()> {
+fn write_prog_id(shell_open_command: &str) -> windows_registry::Result<()> {
     let prog_id_key = CURRENT_USER.create(umpv_prog_id_subkey())?;
+    // Empty so the shell shows the extension instead of this ProgID's name.
     prog_id_key.set_string(DEFAULT_VALUE_NAME, "")?;
     prog_id_key
         .create(r"shell\open\command")?
-        .set_string(DEFAULT_VALUE_NAME, command)
+        .set_string(DEFAULT_VALUE_NAME, shell_open_command)
 }
 
-fn set_associations<'a>(extensions: impl IntoIterator<Item = &'a str>, prog_id: &str) -> usize {
+fn set_associations<'a>(
+    associations: impl IntoIterator<Item = &'a FileAssociation>,
+    prog_id: &str,
+) -> usize {
     let Ok(key) = CURRENT_USER
         .options()
         .write()
@@ -81,28 +85,23 @@ fn set_associations<'a>(extensions: impl IntoIterator<Item = &'a str>, prog_id: 
         return 0;
     };
     let mut count = 0;
-    for extension in extensions {
-        if key.set_string(extension, prog_id).is_ok() {
+    for association in associations {
+        if key.set_string(&association.extension, prog_id).is_ok() {
             count += 1;
         }
     }
     count
 }
 
-pub(crate) fn register(command: &str) -> Result<usize, Error> {
+pub(crate) fn register(shell_open_command: &str) -> Result<usize, Error> {
     let associations = read_associations();
     if associations.is_empty() {
         return Err(Error::NoAssociations);
     }
 
-    write_prog_id(command).map_err(|_| Error::ProgIdWriteFailed)?;
+    write_prog_id(shell_open_command).map_err(|_| Error::ProgIdWriteFailed)?;
 
-    let extension_count = set_associations(
-        associations
-            .iter()
-            .map(|association| association.extension.as_str()),
-        UMPV_PROG_ID,
-    );
+    let extension_count = set_associations(&associations, UMPV_PROG_ID);
     if extension_count == 0 {
         return Err(Error::NoExtensionsRegistered);
     }
@@ -122,8 +121,7 @@ pub(crate) fn unregister() -> Unregistered {
     let extension_count = set_associations(
         associations
             .iter()
-            .filter(|association| association.prog_id == UMPV_PROG_ID)
-            .map(|association| association.extension.as_str()),
+            .filter(|association| association.prog_id == UMPV_PROG_ID),
         MPV_PROG_ID,
     );
     let removed_prog_id = CURRENT_USER.remove_tree(umpv_prog_id_subkey()).is_ok();
