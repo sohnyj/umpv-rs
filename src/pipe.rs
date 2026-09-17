@@ -5,14 +5,13 @@ use std::os::windows::io::AsRawHandle;
 use std::time::{Duration, Instant};
 
 use windows_sys::Win32::Foundation::{
-    ERROR_FILE_NOT_FOUND, ERROR_PIPE_BUSY, ERROR_SEM_TIMEOUT, FALSE,
+    ERROR_FILE_NOT_FOUND, ERROR_PIPE_BUSY, ERROR_SEM_TIMEOUT, FALSE, GetLastError,
 };
 use windows_sys::Win32::Storage::FileSystem::SECURITY_IDENTIFICATION;
 use windows_sys::Win32::System::Pipes::{
     GetNamedPipeServerProcessId, NMPWAIT_NOWAIT, WaitNamedPipeW,
 };
 use windows_sys::Win32::System::RemoteDesktop::ProcessIdToSessionId;
-use windows_sys::Win32::System::Threading::GetCurrentProcessId;
 
 use crate::encode_wide;
 
@@ -45,7 +44,7 @@ const INSTANCE_WAIT_MILLISECONDS: u32 = 5;
 
 fn session_id() -> Result<u32, Error> {
     let mut session_id: u32 = 0;
-    if unsafe { ProcessIdToSessionId(GetCurrentProcessId(), &raw mut session_id) } == FALSE {
+    if unsafe { ProcessIdToSessionId(std::process::id(), &raw mut session_id) } == FALSE {
         return Err(Error::SessionIdUnavailable);
     }
     Ok(session_id)
@@ -91,7 +90,8 @@ impl Pipe {
         if unsafe { WaitNamedPipeW(self.path_wide.as_ptr(), NMPWAIT_NOWAIT) } != FALSE {
             return true;
         }
-        error_code(&std::io::Error::last_os_error()) == Some(ERROR_SEM_TIMEOUT)
+        let last_error = unsafe { GetLastError() };
+        last_error == ERROR_SEM_TIMEOUT
     }
 
     fn open_stream(&self) -> std::io::Result<File> {

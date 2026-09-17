@@ -140,17 +140,16 @@ fn has_url_scheme(argument: &str) -> bool {
 }
 
 fn make_absolute(path: &str) -> String {
-    match std::path::absolute(path) {
-        Ok(absolute_path) => absolute_path.to_string_lossy().into_owned(),
-        Err(error) => error_exit(&format!("Failed to make the file path absolute: {error}")),
-    }
+    std::path::absolute(path)
+        .unwrap_or_else(|error| {
+            error_exit(&format!("Failed to make the file path absolute: {error}"))
+        })
+        .to_string_lossy()
+        .into_owned()
 }
 
 fn umpv_path() -> PathBuf {
-    let Ok(path) = env::current_exe() else {
-        error_exit(&"Failed to locate umpv.exe.");
-    };
-    path
+    env::current_exe().unwrap_or_else(|_| error_exit(&"Failed to locate umpv.exe."))
 }
 
 fn mpv_path() -> PathBuf {
@@ -178,7 +177,7 @@ fn unregister() {
     match registry::unregister() {
         registry::Unregistered::Nothing => show_message("Nothing to unregister."),
         registry::Unregistered::ProgIdOnly => {
-            show_message("Removed the umpv ProgID.\nNo file extensions were pointing at umpv.")
+            show_message("Removed the umpv ProgID.\nNo file extensions were pointing at umpv.");
         }
         registry::Unregistered::ExtensionsRestored(extension_count) => show_message(&format!(
             "Unregistered for {extension_count} file extension(s)."
@@ -186,24 +185,17 @@ fn unregister() {
     }
 }
 
-fn launch_mpv(pipe: &pipe::Pipe, file: &str) {
-    if let Err(error) = mpv::launch(&mpv_path(), pipe, file) {
-        error_exit(&error);
-    }
-}
-
 /// `None` when nothing needs raising: a new mpv raises its own window, and an
 /// unidentified instance cannot be found.
 fn open_in_mpv(pipe: &pipe::Pipe, file: &str, loadfile_flags: &str) -> Option<u32> {
-    let _lock_guard = match lock::acquire() {
-        Ok(guard) => guard,
-        Err(error) => error_exit(&error),
-    };
+    let _lock_guard = lock::acquire().unwrap_or_else(|error| error_exit(&error));
 
     match pipe.send_loadfile(file, loadfile_flags) {
         Ok(pipe::SendOutcome::Sent { server_pid }) => server_pid,
         Ok(pipe::SendOutcome::NoServer) => {
-            launch_mpv(pipe, file);
+            if let Err(error) = mpv::launch(&mpv_path(), pipe, file) {
+                error_exit(&error);
+            }
             None
         }
         Err(error) => error_exit(&error),
@@ -219,10 +211,7 @@ fn open(file: Option<&str>, loadfile_flags: &str) {
     }
     let file = make_absolute(file);
 
-    let pipe = match pipe::Pipe::for_current_session() {
-        Ok(pipe) => pipe,
-        Err(error) => error_exit(&error),
-    };
+    let pipe = pipe::Pipe::for_current_session().unwrap_or_else(|error| error_exit(&error));
 
     if let Some(mpv_pid) = open_in_mpv(&pipe, &file, loadfile_flags) {
         mpv::activate_window(mpv_pid);

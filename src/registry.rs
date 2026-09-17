@@ -126,12 +126,13 @@ pub(crate) fn unregister() -> Unregistered {
     );
     let removed_prog_id = CURRENT_USER.remove_tree(umpv_prog_id_subkey()).is_ok();
 
-    if extension_count > 0 || removed_prog_id {
-        notify_shell_change();
-    }
-    match (extension_count, removed_prog_id) {
+    let unregistered = match (extension_count, removed_prog_id) {
         (0, false) => Unregistered::Nothing,
         (0, true) => Unregistered::ProgIdOnly,
         _ => Unregistered::ExtensionsRestored(extension_count),
+    };
+    if !matches!(unregistered, Unregistered::Nothing) {
+        notify_shell_change();
     }
+    unregistered
 }
