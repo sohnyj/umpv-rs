@@ -1,7 +1,9 @@
+use std::fmt;
 use std::fs::{File, OpenOptions};
-use std::io::Write;
+use std::io::{self, Write};
 use std::os::windows::fs::OpenOptionsExt;
 use std::os::windows::io::AsRawHandle;
+use std::process;
 use std::time::{Duration, Instant};
 
 use windows_sys::Win32::Foundation::{
@@ -21,8 +23,8 @@ pub(crate) enum Error {
     WriteFailed,
 }
 
-impl std::fmt::Display for Error {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Error {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::SessionIdUnavailable => "Failed to determine the session id.",
             Self::ConnectFailed => "Failed to connect to mpv.",
@@ -44,13 +46,13 @@ const INSTANCE_WAIT_MILLISECONDS: u32 = 5;
 
 fn session_id() -> Result<u32, Error> {
     let mut session_id: u32 = 0;
-    if unsafe { ProcessIdToSessionId(std::process::id(), &raw mut session_id) } == FALSE {
+    if unsafe { ProcessIdToSessionId(process::id(), &raw mut session_id) } == FALSE {
         return Err(Error::SessionIdUnavailable);
     }
     Ok(session_id)
 }
 
-fn error_code(error: &std::io::Error) -> Option<u32> {
+fn error_code(error: &io::Error) -> Option<u32> {
     error.raw_os_error().map(i32::cast_unsigned)
 }
 
@@ -94,7 +96,7 @@ impl Pipe {
         last_error == ERROR_SEM_TIMEOUT
     }
 
-    fn open_stream(&self) -> std::io::Result<File> {
+    fn open_stream(&self) -> io::Result<File> {
         OpenOptions::new()
             .write(true)
             .security_qos_flags(SECURITY_IDENTIFICATION)

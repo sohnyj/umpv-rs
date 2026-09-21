@@ -1,3 +1,6 @@
+use std::fmt;
+use std::ptr;
+
 use windows_registry::CURRENT_USER;
 use windows_sys::Win32::UI::Shell::{SHCNE_ASSOCCHANGED, SHCNF_IDLIST, SHChangeNotify};
 
@@ -7,8 +10,8 @@ pub(crate) enum Error {
     NoExtensionsRegistered,
 }
 
-impl std::fmt::Display for Error {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Error {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::NoAssociations => {
                 "No mpv file associations found.\nRun 'mpv.exe --register' first."
@@ -35,8 +38,8 @@ fn notify_shell_change() {
         SHChangeNotify(
             SHCNE_ASSOCCHANGED.cast_signed(),
             SHCNF_IDLIST,
-            std::ptr::null(),
-            std::ptr::null(),
+            ptr::null(),
+            ptr::null(),
         );
     }
 }

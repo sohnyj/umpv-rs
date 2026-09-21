@@ -1,6 +1,9 @@
+use std::fmt;
+use std::io;
 use std::os::windows::io::AsRawHandle;
 use std::path::Path;
 use std::process::{Child, Command};
+use std::ptr;
 use std::time::{Duration, Instant};
 
 use windows_sys::Win32::Foundation::{FALSE, HWND, WAIT_OBJECT_0, WAIT_TIMEOUT};
@@ -14,14 +17,14 @@ use windows_sys::core::{PCWSTR, w};
 use crate::pipe::Pipe;
 
 pub(crate) enum Error {
-    SpawnFailed(std::io::Error),
+    SpawnFailed(io::Error),
     Exited,
     WaitFailed,
     StartupTimedOut,
 }
 
-impl std::fmt::Display for Error {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Error {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::SpawnFailed(error) => write!(formatter, "Failed to launch mpv.exe: {error}"),
             Self::Exited => formatter.write_str("mpv.exe exited before it opened the file."),
@@ -67,16 +70,9 @@ fn wait_for_ipc_server(pipe: &Pipe, mpv_process: &Child) -> Result<(), Error> {
 const MPV_WINDOW_CLASS_NAME: PCWSTR = w!("mpv");
 
 fn find_window(pid: u32) -> Option<HWND> {
-    let mut hwnd: HWND = std::ptr::null_mut();
+    let mut hwnd: HWND = ptr::null_mut();
     loop {
-        hwnd = unsafe {
-            FindWindowExW(
-                std::ptr::null_mut(),
-                hwnd,
-                MPV_WINDOW_CLASS_NAME,
-                std::ptr::null(),
-            )
-        };
+        hwnd = unsafe { FindWindowExW(ptr::null_mut(), hwnd, MPV_WINDOW_CLASS_NAME, ptr::null()) };
         if hwnd.is_null() {
             return None;
         }

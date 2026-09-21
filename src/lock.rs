@@ -1,4 +1,6 @@
+use std::fmt;
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+use std::ptr;
 
 use windows_sys::Win32::Foundation::{FALSE, WAIT_ABANDONED, WAIT_OBJECT_0, WAIT_TIMEOUT};
 use windows_sys::Win32::System::Threading::{CreateMutexW, ReleaseMutex, WaitForSingleObject};
@@ -10,8 +12,8 @@ pub(crate) enum Error {
     TimedOut,
 }
 
-impl std::fmt::Display for Error {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Error {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::CreateFailed => "Failed to create umpv lock.",
             Self::WaitFailed => "Failed to wait for umpv lock.",
@@ -36,7 +38,7 @@ const MUTEX_NAME: PCWSTR = w!(r"Local\umpv_lock");
 const ACQUIRE_TIMEOUT_MILLISECONDS: u32 = 10_000;
 
 pub(crate) fn acquire() -> Result<Guard, Error> {
-    let handle = unsafe { CreateMutexW(std::ptr::null(), FALSE, MUTEX_NAME) };
+    let handle = unsafe { CreateMutexW(ptr::null(), FALSE, MUTEX_NAME) };
     if handle.is_null() {
         return Err(Error::CreateFailed);
     }

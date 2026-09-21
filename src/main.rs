@@ -1,26 +1,28 @@
 #![windows_subsystem = "windows"]
 
-use std::env;
-use std::fmt;
-use std::path::PathBuf;
-use std::process;
-
-use windows_sys::Win32::UI::WindowsAndMessaging::MessageBoxW;
-use windows_sys::core::w;
-
 mod lock;
 mod mpv;
 mod pipe;
 mod registry;
 
+use std::env;
+use std::fmt;
+use std::iter;
+use std::path::{self, PathBuf};
+use std::process;
+use std::ptr;
+
+use windows_sys::Win32::UI::WindowsAndMessaging::MessageBoxW;
+use windows_sys::core::w;
+
 fn encode_wide(string: &str) -> Vec<u16> {
-    string.encode_utf16().chain(std::iter::once(0)).collect()
+    string.encode_utf16().chain(iter::once(0)).collect()
 }
 
 fn show_message(text: &str) {
     let text_wide = encode_wide(text);
     unsafe {
-        MessageBoxW(std::ptr::null_mut(), text_wide.as_ptr(), w!("umpv"), 0);
+        MessageBoxW(ptr::null_mut(), text_wide.as_ptr(), w!("umpv"), 0);
     }
 }
 
@@ -140,7 +142,7 @@ fn has_url_scheme(argument: &str) -> bool {
 }
 
 fn make_absolute(path: &str) -> String {
-    std::path::absolute(path)
+    path::absolute(path)
         .unwrap_or_else(|error| {
             error_exit(&format!("Failed to make the file path absolute: {error}"))
         })
