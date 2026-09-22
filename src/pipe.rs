@@ -15,7 +15,7 @@ use windows_sys::Win32::System::Pipes::{
 };
 use windows_sys::Win32::System::RemoteDesktop::ProcessIdToSessionId;
 
-use crate::encode_wide;
+use crate::{LoadfileFlags, encode_wide};
 
 pub(crate) enum Error {
     SessionIdUnavailable,
@@ -64,7 +64,7 @@ fn server_pid(stream: &File) -> Option<u32> {
     Some(pid)
 }
 
-fn loadfile_command(file: &str, loadfile_flags: &str) -> String {
+fn loadfile_command(file: &str, loadfile_flags: LoadfileFlags) -> String {
     let escaped = file
         .replace('\\', r"\\")
         .replace('"', "\\\"")
@@ -129,7 +129,7 @@ impl Pipe {
     pub(crate) fn send_loadfile(
         &self,
         file: &str,
-        loadfile_flags: &str,
+        loadfile_flags: LoadfileFlags,
     ) -> Result<SendOutcome, Error> {
         let Some(mut stream) = self.connect()? else {
             return Ok(SendOutcome::NoServer);

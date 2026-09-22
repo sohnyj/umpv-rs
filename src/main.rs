@@ -11,6 +11,7 @@ use std::iter;
 use std::path::{self, PathBuf};
 use std::process;
 use std::ptr;
+use std::str;
 
 use windows_sys::Win32::UI::WindowsAndMessaging::MessageBoxW;
 use windows_sys::core::w;
@@ -38,25 +39,56 @@ enum Mode {
 
 enum CommandLineOption {
     Mode(Mode),
-    Loadfile(&'static str),
+    Loadfile(LoadfileFlags),
 }
 
 const LOADFILE_OPTION_PREFIX: &str = "--loadfile=";
-const SUPPORTED_LOADFILE_FLAGS: &[&str] = &[
-    "replace",
-    "append",
-    "append+play",
-    "insert-next",
-    "insert-next+play",
-];
-const DEFAULT_LOADFILE_FLAGS: &str = SUPPORTED_LOADFILE_FLAGS[0];
 
-fn supported_loadfile_flags(given: &str) -> Result<&'static str, ArgumentError> {
-    SUPPORTED_LOADFILE_FLAGS
-        .iter()
-        .copied()
-        .find(|supported| *supported == given)
-        .ok_or_else(|| ArgumentError::UnsupportedLoadfileFlags(given.to_owned()))
+#[derive(Clone, Copy, Default)]
+enum LoadfileFlags {
+    #[default]
+    Replace,
+    Append,
+    AppendPlay,
+    InsertNext,
+    InsertNextPlay,
+}
+
+impl LoadfileFlags {
+    const ALL: [Self; 5] = [
+        Self::Replace,
+        Self::Append,
+        Self::AppendPlay,
+        Self::InsertNext,
+        Self::InsertNextPlay,
+    ];
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Replace => "replace",
+            Self::Append => "append",
+            Self::AppendPlay => "append+play",
+            Self::InsertNext => "insert-next",
+            Self::InsertNextPlay => "insert-next+play",
+        }
+    }
+}
+
+impl fmt::Display for LoadfileFlags {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+impl str::FromStr for LoadfileFlags {
+    type Err = ArgumentError;
+
+    fn from_str(given: &str) -> Result<Self, Self::Err> {
+        Self::ALL
+            .into_iter()
+            .find(|flags| flags.as_str() == given)
+            .ok_or_else(|| ArgumentError::UnsupportedLoadfileFlags(given.to_owned()))
+    }
 }
 
 fn parse_option(option: &str) -> Result<CommandLineOption, ArgumentError> {
@@ -64,7 +96,7 @@ fn parse_option(option: &str) -> Result<CommandLineOption, ArgumentError> {
         "--register" => Ok(CommandLineOption::Mode(Mode::Register)),
         "--unregister" => Ok(CommandLineOption::Mode(Mode::Unregister)),
         _ => match option.strip_prefix(LOADFILE_OPTION_PREFIX) {
-            Some(given) => supported_loadfile_flags(given).map(CommandLineOption::Loadfile),
+            Some(given) => given.parse().map(CommandLineOption::Loadfile),
             None => Err(ArgumentError::UnknownOption(option.to_owned())),
         },
     }
@@ -88,13 +120,13 @@ impl fmt::Display for ArgumentError {
 
 enum Command {
     Register {
-        loadfile_flags: &'static str,
+        loadfile_flags: LoadfileFlags,
     },
     Unregister,
     Open {
         /// The shell passes one file per invocation; extra files are ignored.
         file: Option<String>,
-        loadfile_flags: &'static str,
+        loadfile_flags: LoadfileFlags,
     },
 }
 
@@ -119,7 +151,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = String>) -> Result<Comman
         }
     }
 
-    let loadfile_flags = loadfile_flags.unwrap_or(DEFAULT_LOADFILE_FLAGS);
+    let loadfile_flags = loadfile_flags.unwrap_or_default();
 
     Ok(match mode {
         Some(Mode::Register) => Command::Register { loadfile_flags },
@@ -159,14 +191,14 @@ fn mpv_path() -> PathBuf {
 }
 
 /// `%L` is the shell's placeholder for the selected file.
-fn shell_open_command(loadfile_flags: &str) -> String {
+fn shell_open_command(loadfile_flags: LoadfileFlags) -> String {
     format!(
         "\"{}\" {LOADFILE_OPTION_PREFIX}{loadfile_flags} -- \"%L\"",
         umpv_path().display()
     )
 }
 
-fn register(loadfile_flags: &str) {
+fn register(loadfile_flags: LoadfileFlags) {
     match registry::register(&shell_open_command(loadfile_flags)) {
         Ok(extension_count) => show_message(&format!(
             "Registered for {extension_count} file extension(s).\nloadfile: {loadfile_flags}"
@@ -189,7 +221,7 @@ fn unregister() {
 
 /// `None` when nothing needs raising: a new mpv raises its own window, and an
 /// unidentified instance cannot be found.
-fn open_in_mpv(pipe: &pipe::Pipe, file: &str, loadfile_flags: &str) -> Option<u32> {
+fn open_in_mpv(pipe: &pipe::Pipe, file: &str, loadfile_flags: LoadfileFlags) -> Option<u32> {
     let _lock_guard = lock::acquire().unwrap_or_else(|error| error_exit(&error));
 
     match pipe.send_loadfile(file, loadfile_flags) {
@@ -204,7 +236,7 @@ fn open_in_mpv(pipe: &pipe::Pipe, file: &str, loadfile_flags: &str) -> Option<u3
     }
 }
 
-fn open(file: Option<&str>, loadfile_flags: &str) {
+fn open(file: Option<&str>, loadfile_flags: LoadfileFlags) {
     let Some(file) = file else {
         return;
     };
