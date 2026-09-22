@@ -83,11 +83,11 @@ impl fmt::Display for LoadfileFlags {
 impl str::FromStr for LoadfileFlags {
     type Err = ArgumentError;
 
-    fn from_str(given: &str) -> Result<Self, Self::Err> {
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
         Self::ALL
             .into_iter()
-            .find(|flags| flags.as_str() == given)
-            .ok_or_else(|| ArgumentError::UnsupportedLoadfileFlags(given.to_owned()))
+            .find(|flags| flags.as_str() == text)
+            .ok_or_else(|| ArgumentError::UnsupportedLoadfileFlags(text.to_owned()))
     }
 }
 
@@ -213,7 +213,7 @@ fn unregister() {
         Ok(registry::Unregistered::ProgIdOnly) => {
             show_message("Removed the umpv ProgID.\nNo file extensions were pointing at umpv.");
         }
-        Ok(registry::Unregistered::ExtensionsRestored(extension_count)) => show_message(&format!(
+        Ok(registry::Unregistered::Extensions(extension_count)) => show_message(&format!(
             "Unregistered for {extension_count} file extension(s)."
         )),
         Err(error) => error_exit(&error),

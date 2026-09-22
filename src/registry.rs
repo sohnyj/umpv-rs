@@ -7,7 +7,7 @@ use windows_sys::Win32::UI::Shell::{SHCNE_ASSOCCHANGED, SHCNF_IDLIST, SHChangeNo
 
 pub(crate) enum Error {
     NoAssociations,
-    AssociationsUnreadable,
+    AssociationsReadFailed,
     ProgIdWriteFailed,
     NoExtensionsRegistered,
     ProgIdRemoveFailed,
@@ -19,7 +19,7 @@ impl fmt::Display for Error {
             Self::NoAssociations => {
                 "No mpv file associations found.\nRun 'mpv.exe --register' first."
             }
-            Self::AssociationsUnreadable => "Failed to read the mpv file associations.",
+            Self::AssociationsReadFailed => "Failed to read the mpv file associations.",
             Self::ProgIdWriteFailed => "Failed to write umpv ProgID to registry.",
             Self::NoExtensionsRegistered => "Failed to register any file associations.",
             Self::ProgIdRemoveFailed => "Failed to remove umpv ProgID from registry.",
@@ -36,8 +36,8 @@ const DEFAULT_VALUE_NAME: &str = "";
 /// `HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND)`; windows-registry hides the HRESULT type.
 const HRESULT_FILE_NOT_FOUND: i32 = (0x8007_0000 | ERROR_FILE_NOT_FOUND).cast_signed();
 
-fn is_not_found(code: i32) -> bool {
-    code == HRESULT_FILE_NOT_FOUND
+fn is_not_found(hresult: i32) -> bool {
+    hresult == HRESULT_FILE_NOT_FOUND
 }
 
 fn umpv_prog_id_subkey() -> String {
@@ -63,20 +63,20 @@ fn open_file_associations() -> windows_registry::Result<Key> {
         .open(SUBKEY_FILE_ASSOCIATIONS)
 }
 
-/// `accept` takes the ProgID by value, so it builds a string only where it compares one.
+/// The ProgID comes by value, so a string is built only where one is compared.
 fn read_extensions(
     key: &Key,
-    accept: impl Fn(Value) -> bool,
+    accept_prog_id: impl Fn(Value) -> bool,
 ) -> windows_registry::Result<Vec<String>> {
     Ok(key
         .values()?
         .filter(|(name, _)| name.starts_with('.') && name.len() > 1)
-        .filter_map(|(name, value)| accept(value).then_some(name))
+        .filter_map(|(name, prog_id)| accept_prog_id(prog_id).then_some(name))
         .collect())
 }
 
-fn is_umpv_prog_id(value: Value) -> bool {
-    String::try_from(value).is_ok_and(|prog_id| prog_id == UMPV_PROG_ID)
+fn is_umpv_prog_id(prog_id: Value) -> bool {
+    String::try_from(prog_id).is_ok_and(|prog_id| prog_id == UMPV_PROG_ID)
 }
 
 fn write_prog_id(shell_open_command: &str) -> windows_registry::Result<()> {
@@ -103,10 +103,10 @@ pub(crate) fn register(shell_open_command: &str) -> Result<usize, Error> {
         if is_not_found(error.code().0) {
             Error::NoAssociations
         } else {
-            Error::AssociationsUnreadable
+            Error::AssociationsReadFailed
         }
     })?;
-    let extensions = read_extensions(&key, |_| true).map_err(|_| Error::AssociationsUnreadable)?;
+    let extensions = read_extensions(&key, |_| true).map_err(|_| Error::AssociationsReadFailed)?;
     if extensions.is_empty() {
         return Err(Error::NoAssociations);
     }
@@ -125,7 +125,7 @@ pub(crate) fn register(shell_open_command: &str) -> Result<usize, Error> {
 pub(crate) enum Unregistered {
     Nothing,
     ProgIdOnly,
-    ExtensionsRestored(usize),
+    Extensions(usize),
 }
 
 /// `false` when there was no ProgID left to remove.
@@ -141,18 +141,18 @@ pub(crate) fn unregister() -> Result<Unregistered, Error> {
     let extension_count = match open_file_associations() {
         Ok(key) => {
             let extensions = read_extensions(&key, is_umpv_prog_id)
-                .map_err(|_| Error::AssociationsUnreadable)?;
+                .map_err(|_| Error::AssociationsReadFailed)?;
             set_associations(&key, &extensions, MPV_PROG_ID)
         }
         Err(error) if is_not_found(error.code().0) => 0,
-        Err(_) => return Err(Error::AssociationsUnreadable),
+        Err(_) => return Err(Error::AssociationsReadFailed),
     };
     let removed_prog_id = remove_prog_id()?;
 
     let unregistered = match (extension_count, removed_prog_id) {
         (0, false) => Unregistered::Nothing,
         (0, true) => Unregistered::ProgIdOnly,
-        _ => Unregistered::ExtensionsRestored(extension_count),
+        _ => Unregistered::Extensions(extension_count),
     };
     if !matches!(unregistered, Unregistered::Nothing) {
         notify_shell_change();
