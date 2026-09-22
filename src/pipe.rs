@@ -72,24 +72,20 @@ fn loadfile_command(file: &str, loadfile_flags: &str) -> String {
     format!("raw loadfile \"{escaped}\" {loadfile_flags}\n")
 }
 
-pub(crate) struct Pipe {
-    path: String,
-}
+pub(crate) struct Pipe(String);
 
 impl Pipe {
     pub(crate) fn for_current_session() -> Result<Self, Error> {
-        Ok(Self {
-            path: format!(r"\\.\pipe\umpv-{}", session_id()?),
-        })
+        Ok(Self(format!(r"\\.\pipe\umpv-{}", session_id()?)))
     }
 
     pub(crate) fn path(&self) -> &str {
-        &self.path
+        &self.0
     }
 
     /// Freeing the encoded path can overwrite the last error, so it is read first.
     fn wait_for_instance(&self, timeout_milliseconds: u32) -> Result<(), u32> {
-        let path_wide = encode_wide(&self.path);
+        let path_wide = encode_wide(self.path());
         if unsafe { WaitNamedPipeW(path_wide.as_ptr(), timeout_milliseconds) } != FALSE {
             return Ok(());
         }
@@ -107,7 +103,7 @@ impl Pipe {
         OpenOptions::new()
             .write(true)
             .security_qos_flags(SECURITY_IDENTIFICATION)
-            .open(&self.path)
+            .open(self.path())
     }
 
     /// `Ok(None)` when no server is listening.
