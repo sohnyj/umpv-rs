@@ -1,7 +1,7 @@
 use std::fmt;
 use std::ptr;
 
-use windows_registry::{CURRENT_USER, Key};
+use windows_registry::{CURRENT_USER, Key, Value};
 use windows_sys::Win32::UI::Shell::{SHCNE_ASSOCCHANGED, SHCNF_IDLIST, SHChangeNotify};
 
 pub(crate) enum Error {
@@ -44,11 +44,6 @@ fn notify_shell_change() {
     }
 }
 
-struct FileAssociation {
-    extension: String,
-    prog_id: String,
-}
-
 fn open_file_associations() -> Option<Key> {
     CURRENT_USER
         .options()
@@ -58,19 +53,19 @@ fn open_file_associations() -> Option<Key> {
         .ok()
 }
 
-fn read_associations(key: &Key) -> Vec<FileAssociation> {
+/// `accept` takes the ProgID by value, so it builds a string only where it compares one.
+fn read_extensions(key: &Key, accept: impl Fn(Value) -> bool) -> Vec<String> {
     let Ok(values) = key.values() else {
         return Vec::new();
     };
     values
         .filter(|(name, _)| name.starts_with('.') && name.len() > 1)
-        .filter_map(|(name, value)| {
-            Some(FileAssociation {
-                extension: name,
-                prog_id: String::try_from(value).ok()?,
-            })
-        })
+        .filter_map(|(name, value)| accept(value).then_some(name))
         .collect()
+}
+
+fn is_umpv_prog_id(value: Value) -> bool {
+    String::try_from(value).is_ok_and(|prog_id| prog_id == UMPV_PROG_ID)
 }
 
 fn write_prog_id(shell_open_command: &str) -> windows_registry::Result<()> {
@@ -82,14 +77,10 @@ fn write_prog_id(shell_open_command: &str) -> windows_registry::Result<()> {
         .set_string(DEFAULT_VALUE_NAME, shell_open_command)
 }
 
-fn set_associations<'a>(
-    key: &Key,
-    associations: impl IntoIterator<Item = &'a FileAssociation>,
-    prog_id: &str,
-) -> usize {
+fn set_associations(key: &Key, extensions: &[String], prog_id: &str) -> usize {
     let mut count = 0;
-    for association in associations {
-        if key.set_string(&association.extension, prog_id).is_ok() {
+    for extension in extensions {
+        if key.set_string(extension, prog_id).is_ok() {
             count += 1;
         }
     }
@@ -98,14 +89,14 @@ fn set_associations<'a>(
 
 pub(crate) fn register(shell_open_command: &str) -> Result<usize, Error> {
     let key = open_file_associations().ok_or(Error::NoAssociations)?;
-    let associations = read_associations(&key);
-    if associations.is_empty() {
+    let extensions = read_extensions(&key, |_| true);
+    if extensions.is_empty() {
         return Err(Error::NoAssociations);
     }
 
     write_prog_id(shell_open_command).map_err(|_| Error::ProgIdWriteFailed)?;
 
-    let extension_count = set_associations(&key, &associations, UMPV_PROG_ID);
+    let extension_count = set_associations(&key, &extensions, UMPV_PROG_ID);
     if extension_count == 0 {
         return Err(Error::NoExtensionsRegistered);
     }
@@ -122,14 +113,8 @@ pub(crate) enum Unregistered {
 
 pub(crate) fn unregister() -> Unregistered {
     let extension_count = open_file_associations().map_or(0, |key| {
-        let associations = read_associations(&key);
-        set_associations(
-            &key,
-            associations
-                .iter()
-                .filter(|association| association.prog_id == UMPV_PROG_ID),
-            MPV_PROG_ID,
-        )
+        let extensions = read_extensions(&key, is_umpv_prog_id);
+        set_associations(&key, &extensions, MPV_PROG_ID)
     });
     let removed_prog_id = CURRENT_USER.remove_tree(umpv_prog_id_subkey()).is_ok();
 
