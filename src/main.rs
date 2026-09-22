@@ -209,13 +209,14 @@ fn register(loadfile_flags: LoadfileFlags) {
 
 fn unregister() {
     match registry::unregister() {
-        registry::Unregistered::Nothing => show_message("Nothing to unregister."),
-        registry::Unregistered::ProgIdOnly => {
+        Ok(registry::Unregistered::Nothing) => show_message("Nothing to unregister."),
+        Ok(registry::Unregistered::ProgIdOnly) => {
             show_message("Removed the umpv ProgID.\nNo file extensions were pointing at umpv.");
         }
-        registry::Unregistered::ExtensionsRestored(extension_count) => show_message(&format!(
+        Ok(registry::Unregistered::ExtensionsRestored(extension_count)) => show_message(&format!(
             "Unregistered for {extension_count} file extension(s)."
         )),
+        Err(error) => error_exit(&error),
     }
 }
 
