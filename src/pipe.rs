@@ -20,6 +20,7 @@ use crate::{LoadfileFlags, encode_wide};
 pub(crate) enum Error {
     SessionIdUnavailable,
     ConnectFailed,
+    ConnectTimedOut,
     WriteFailed,
 }
 
@@ -28,6 +29,9 @@ impl fmt::Display for Error {
         formatter.write_str(match self {
             Self::SessionIdUnavailable => "Failed to determine the session id.",
             Self::ConnectFailed => "Failed to connect to mpv.",
+            Self::ConnectTimedOut => {
+                "Timed out connecting to mpv.\nEvery pipe instance stayed busy."
+            }
             Self::WriteFailed => "Failed to send the file to mpv.",
         })
     }
@@ -120,7 +124,7 @@ impl Pipe {
                 },
             }
             if Instant::now() >= timeout_at {
-                return Err(Error::ConnectFailed);
+                return Err(Error::ConnectTimedOut);
             }
             let _ = self.wait_for_instance(INSTANCE_WAIT_MILLISECONDS);
         }
