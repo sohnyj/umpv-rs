@@ -74,26 +74,33 @@ fn loadfile_command(file: &str, loadfile_flags: &str) -> String {
 
 pub(crate) struct Pipe {
     path: String,
-    path_wide: Vec<u16>,
 }
 
 impl Pipe {
     pub(crate) fn for_current_session() -> Result<Self, Error> {
-        let path = format!(r"\\.\pipe\umpv-{}", session_id()?);
-        let path_wide = encode_wide(&path);
-        Ok(Self { path, path_wide })
+        Ok(Self {
+            path: format!(r"\\.\pipe\umpv-{}", session_id()?),
+        })
     }
 
     pub(crate) fn path(&self) -> &str {
         &self.path
     }
 
-    pub(crate) fn server_exists(&self) -> bool {
-        if unsafe { WaitNamedPipeW(self.path_wide.as_ptr(), NMPWAIT_NOWAIT) } != FALSE {
-            return true;
+    /// Freeing the encoded path can overwrite the last error, so it is read first.
+    fn wait_for_instance(&self, timeout_milliseconds: u32) -> Result<(), u32> {
+        let path_wide = encode_wide(&self.path);
+        if unsafe { WaitNamedPipeW(path_wide.as_ptr(), timeout_milliseconds) } != FALSE {
+            return Ok(());
         }
-        let last_error = unsafe { GetLastError() };
-        last_error == ERROR_SEM_TIMEOUT
+        Err(unsafe { GetLastError() })
+    }
+
+    pub(crate) fn server_exists(&self) -> bool {
+        match self.wait_for_instance(NMPWAIT_NOWAIT) {
+            Ok(()) => true,
+            Err(last_error) => last_error == ERROR_SEM_TIMEOUT,
+        }
     }
 
     fn open_stream(&self) -> io::Result<File> {
@@ -119,7 +126,7 @@ impl Pipe {
             if Instant::now() >= timeout_at {
                 return Err(Error::ConnectFailed);
             }
-            unsafe { WaitNamedPipeW(self.path_wide.as_ptr(), INSTANCE_WAIT_MILLISECONDS) };
+            let _ = self.wait_for_instance(INSTANCE_WAIT_MILLISECONDS);
         }
     }
 
