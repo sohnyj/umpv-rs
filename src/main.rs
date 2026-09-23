@@ -37,11 +37,6 @@ enum Mode {
     Unregister,
 }
 
-enum CommandLineOption {
-    Mode(Mode),
-    Loadfile(LoadfileFlags),
-}
-
 const LOADFILE_OPTION_PREFIX: &str = "--loadfile=";
 
 #[derive(Clone, Copy, Default)]
@@ -91,17 +86,6 @@ impl str::FromStr for LoadfileFlags {
     }
 }
 
-fn parse_option(option: &str) -> Result<CommandLineOption, ArgumentError> {
-    match option {
-        "--register" => Ok(CommandLineOption::Mode(Mode::Register)),
-        "--unregister" => Ok(CommandLineOption::Mode(Mode::Unregister)),
-        _ => match option.strip_prefix(LOADFILE_OPTION_PREFIX) {
-            Some(given) => given.parse().map(CommandLineOption::Loadfile),
-            None => Err(ArgumentError::UnknownOption(option.to_owned())),
-        },
-    }
-}
-
 enum ArgumentError {
     UnknownOption(String),
     UnsupportedLoadfileFlags(String),
@@ -139,15 +123,16 @@ fn parse_arguments(arguments: impl IntoIterator<Item = String>) -> Result<Comman
     for argument in arguments {
         if past_end_of_options || !argument.starts_with("--") {
             file = file.or(Some(argument));
-        } else if argument == "--" {
-            past_end_of_options = true;
-        } else {
-            match parse_option(&argument)? {
-                CommandLineOption::Mode(parsed) => mode = mode.or(Some(parsed)),
-                CommandLineOption::Loadfile(parsed) => {
-                    loadfile_flags = loadfile_flags.or(Some(parsed));
-                }
-            }
+            continue;
+        }
+        match argument.as_str() {
+            "--" => past_end_of_options = true,
+            "--register" => mode = mode.or(Some(Mode::Register)),
+            "--unregister" => mode = mode.or(Some(Mode::Unregister)),
+            option => match option.strip_prefix(LOADFILE_OPTION_PREFIX) {
+                Some(text) => loadfile_flags = loadfile_flags.or(Some(text.parse()?)),
+                None => return Err(ArgumentError::UnknownOption(option.to_owned())),
+            },
         }
     }
 
