@@ -15,7 +15,8 @@ use windows_sys::Win32::System::Pipes::{
 };
 use windows_sys::Win32::System::RemoteDesktop::ProcessIdToSessionId;
 
-use crate::{LoadfileFlags, encode_wide};
+use crate::command_line::LoadfileFlags;
+use crate::encode_wide;
 
 pub(crate) enum Error {
     SessionIdUnavailable,

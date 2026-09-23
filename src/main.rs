@@ -1,5 +1,6 @@
 #![windows_subsystem = "windows"]
 
+mod command_line;
 mod lock;
 mod mpv;
 mod pipe;
@@ -11,10 +12,11 @@ use std::iter;
 use std::path::{self, Path, PathBuf};
 use std::process;
 use std::ptr;
-use std::str;
 
 use windows_sys::Win32::UI::WindowsAndMessaging::MessageBoxW;
 use windows_sys::core::w;
+
+use crate::command_line::{Command, LoadfileFlags};
 
 fn encode_wide(string: &str) -> Vec<u16> {
     string.encode_utf16().chain(iter::once(0)).collect()
@@ -30,123 +32,6 @@ fn show_message(text: &str) {
 fn error_exit(error: &dyn fmt::Display) -> ! {
     show_message(&error.to_string());
     process::exit(1);
-}
-
-enum Mode {
-    Register,
-    Unregister,
-}
-
-const LOADFILE_OPTION_PREFIX: &str = "--loadfile=";
-
-#[derive(Clone, Copy, Default)]
-enum LoadfileFlags {
-    #[default]
-    Replace,
-    Append,
-    AppendPlay,
-    InsertNext,
-    InsertNextPlay,
-}
-
-impl LoadfileFlags {
-    const ALL: &[Self] = &[
-        Self::Replace,
-        Self::Append,
-        Self::AppendPlay,
-        Self::InsertNext,
-        Self::InsertNextPlay,
-    ];
-
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Replace => "replace",
-            Self::Append => "append",
-            Self::AppendPlay => "append+play",
-            Self::InsertNext => "insert-next",
-            Self::InsertNextPlay => "insert-next+play",
-        }
-    }
-}
-
-impl fmt::Display for LoadfileFlags {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(self.as_str())
-    }
-}
-
-impl str::FromStr for LoadfileFlags {
-    type Err = ArgumentError;
-
-    fn from_str(text: &str) -> Result<Self, Self::Err> {
-        Self::ALL
-            .iter()
-            .copied()
-            .find(|flags| flags.as_str() == text)
-            .ok_or_else(|| ArgumentError::UnsupportedLoadfileFlags(text.to_owned()))
-    }
-}
-
-enum ArgumentError {
-    UnknownOption(String),
-    UnsupportedLoadfileFlags(String),
-}
-
-impl fmt::Display for ArgumentError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::UnknownOption(option) => write!(formatter, "Unknown option: {option}"),
-            Self::UnsupportedLoadfileFlags(loadfile_flags) => {
-                write!(formatter, "Unsupported loadfile flags: {loadfile_flags}")
-            }
-        }
-    }
-}
-
-enum Command {
-    Register {
-        loadfile_flags: LoadfileFlags,
-    },
-    Unregister,
-    Open {
-        /// The shell passes one file per invocation; extra files are ignored.
-        file: Option<String>,
-        loadfile_flags: LoadfileFlags,
-    },
-}
-
-fn parse_arguments(arguments: impl IntoIterator<Item = String>) -> Result<Command, ArgumentError> {
-    let mut mode = None;
-    let mut loadfile_flags = None;
-    let mut file = None;
-    let mut past_end_of_options = false;
-
-    for argument in arguments {
-        if past_end_of_options || !argument.starts_with("--") {
-            file = file.or(Some(argument));
-            continue;
-        }
-        match argument.as_str() {
-            "--" => past_end_of_options = true,
-            "--register" => mode = mode.or(Some(Mode::Register)),
-            "--unregister" => mode = mode.or(Some(Mode::Unregister)),
-            option => match option.strip_prefix(LOADFILE_OPTION_PREFIX) {
-                Some(text) => loadfile_flags = loadfile_flags.or(Some(text.parse()?)),
-                None => return Err(ArgumentError::UnknownOption(option.to_owned())),
-            },
-        }
-    }
-
-    let loadfile_flags = loadfile_flags.unwrap_or_default();
-
-    Ok(match mode {
-        Some(Mode::Register) => Command::Register { loadfile_flags },
-        Some(Mode::Unregister) => Command::Unregister,
-        None => Command::Open {
-            file,
-            loadfile_flags,
-        },
-    })
 }
 
 fn has_url_scheme(argument: &str) -> bool {
@@ -176,16 +61,11 @@ fn mpv_path() -> PathBuf {
     umpv_path().with_file_name("mpv.exe")
 }
 
-/// `%L` is the shell's placeholder for the selected file.
-fn shell_open_command(loadfile_flags: LoadfileFlags) -> String {
-    format!(
-        "\"{}\" {LOADFILE_OPTION_PREFIX}{loadfile_flags} -- \"%L\"",
-        umpv_path().display()
-    )
-}
-
 fn register(loadfile_flags: LoadfileFlags) {
-    match registry::register(&shell_open_command(loadfile_flags)) {
+    match registry::register(&command_line::shell_open_command(
+        &umpv_path(),
+        loadfile_flags,
+    )) {
         Ok(extension_count) => show_message(&format!(
             "Registered for {extension_count} file extension(s).\nloadfile: {loadfile_flags}"
         )),
@@ -262,7 +142,7 @@ fn open(file: Option<&str>, loadfile_flags: LoadfileFlags) {
 }
 
 fn main() {
-    match parse_arguments(env::args().skip(1)) {
+    match command_line::parse_arguments(env::args().skip(1)) {
         Ok(Command::Register { loadfile_flags }) => register(loadfile_flags),
         Ok(Command::Unregister) => unregister(),
         Ok(Command::Open {
