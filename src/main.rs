@@ -50,7 +50,7 @@ enum LoadfileFlags {
 }
 
 impl LoadfileFlags {
-    const ALL: [Self; 5] = [
+    const ALL: &[Self] = &[
         Self::Replace,
         Self::Append,
         Self::AppendPlay,
@@ -80,7 +80,8 @@ impl str::FromStr for LoadfileFlags {
 
     fn from_str(text: &str) -> Result<Self, Self::Err> {
         Self::ALL
-            .into_iter()
+            .iter()
+            .copied()
             .find(|flags| flags.as_str() == text)
             .ok_or_else(|| ArgumentError::UnsupportedLoadfileFlags(text.to_owned()))
     }
