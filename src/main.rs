@@ -8,7 +8,7 @@ mod registry;
 use std::env;
 use std::fmt;
 use std::iter;
-use std::path::{self, PathBuf};
+use std::path::{self, Path, PathBuf};
 use std::process;
 use std::ptr;
 use std::str;
@@ -220,20 +220,40 @@ fn unregister() {
     }
 }
 
+enum OpenError {
+    Lock(lock::Error),
+    Pipe(pipe::Error),
+    Mpv(mpv::Error),
+}
+
+impl fmt::Display for OpenError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Lock(error) => fmt::Display::fmt(error, formatter),
+            Self::Pipe(error) => fmt::Display::fmt(error, formatter),
+            Self::Mpv(error) => fmt::Display::fmt(error, formatter),
+        }
+    }
+}
+
 /// `None` when nothing needs raising: a new mpv raises its own window, and an
 /// unidentified instance cannot be found.
-fn open_in_mpv(pipe: &pipe::Pipe, file: &str, loadfile_flags: LoadfileFlags) -> Option<u32> {
-    let _lock_guard = lock::acquire().unwrap_or_else(|error| error_exit(&error));
+fn open_in_mpv(
+    pipe: &pipe::Pipe,
+    mpv_path: &Path,
+    file: &str,
+    loadfile_flags: LoadfileFlags,
+) -> Result<Option<u32>, OpenError> {
+    // Showing an error here would hold the lock until its message box is closed.
+    let _lock_guard = lock::acquire().map_err(OpenError::Lock)?;
 
     match pipe.send_loadfile(file, loadfile_flags) {
-        Ok(pipe::SendOutcome::Sent { server_pid }) => server_pid,
+        Ok(pipe::SendOutcome::Sent { server_pid }) => Ok(server_pid),
         Ok(pipe::SendOutcome::NoServer) => {
-            if let Err(error) = mpv::launch(&mpv_path(), pipe, file) {
-                error_exit(&error);
-            }
-            None
+            mpv::launch(mpv_path, pipe, file).map_err(OpenError::Mpv)?;
+            Ok(None)
         }
-        Err(error) => error_exit(&error),
+        Err(error) => Err(OpenError::Pipe(error)),
     }
 }
 
@@ -248,8 +268,10 @@ fn open(file: Option<&str>, loadfile_flags: LoadfileFlags) {
 
     let pipe = pipe::Pipe::for_current_session().unwrap_or_else(|error| error_exit(&error));
 
-    if let Some(mpv_pid) = open_in_mpv(&pipe, &file, loadfile_flags) {
-        mpv::activate_window(mpv_pid);
+    match open_in_mpv(&pipe, &mpv_path(), &file, loadfile_flags) {
+        Ok(Some(mpv_pid)) => mpv::activate_window(mpv_pid),
+        Ok(None) => {}
+        Err(error) => error_exit(&error),
     }
 }
 
