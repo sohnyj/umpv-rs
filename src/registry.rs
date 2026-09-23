@@ -2,6 +2,7 @@ use std::fmt;
 use std::ptr;
 
 use windows_registry::{CURRENT_USER, Key, Value};
+use windows_result::WIN32_ERROR;
 use windows_sys::Win32::Foundation::ERROR_FILE_NOT_FOUND;
 use windows_sys::Win32::UI::Shell::{SHCNE_ASSOCCHANGED, SHCNF_IDLIST, SHChangeNotify};
 
@@ -33,11 +34,9 @@ const UMPV_PROG_ID: &str = "io.mpv.umpv";
 const MPV_PROG_ID: &str = "io.mpv.file";
 /// A registry key's unnamed default value.
 const DEFAULT_VALUE_NAME: &str = "";
-/// `HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND)`; windows-registry hides the HRESULT type.
-const HRESULT_FILE_NOT_FOUND: i32 = (0x8007_0000 | ERROR_FILE_NOT_FOUND).cast_signed();
 
-fn is_not_found(hresult: i32) -> bool {
-    hresult == HRESULT_FILE_NOT_FOUND
+fn is_not_found(error: &windows_result::Error) -> bool {
+    WIN32_ERROR::from_error(error) == Some(WIN32_ERROR(ERROR_FILE_NOT_FOUND))
 }
 
 fn umpv_prog_id_subkey() -> String {
@@ -100,7 +99,7 @@ fn set_associations(key: &Key, extensions: &[String], prog_id: &str) -> usize {
 
 pub(crate) fn register(shell_open_command: &str) -> Result<usize, Error> {
     let key = open_file_associations().map_err(|error| {
-        if is_not_found(error.code().0) {
+        if is_not_found(&error) {
             Error::NoAssociations
         } else {
             Error::AssociationsReadFailed
@@ -132,7 +131,7 @@ pub(crate) enum Unregistered {
 fn remove_prog_id() -> Result<bool, Error> {
     match CURRENT_USER.remove_tree(umpv_prog_id_subkey()) {
         Ok(()) => Ok(true),
-        Err(error) if is_not_found(error.code().0) => Ok(false),
+        Err(error) if is_not_found(&error) => Ok(false),
         Err(_) => Err(Error::ProgIdRemoveFailed),
     }
 }
@@ -144,7 +143,7 @@ pub(crate) fn unregister() -> Result<Unregistered, Error> {
                 .map_err(|_| Error::AssociationsReadFailed)?;
             set_associations(&key, &extensions, MPV_PROG_ID)
         }
-        Err(error) if is_not_found(error.code().0) => 0,
+        Err(error) if is_not_found(&error) => 0,
         Err(_) => return Err(Error::AssociationsReadFailed),
     };
     let removed_prog_id = remove_prog_id()?;

@@ -5,6 +5,11 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      windows-registry:
+        patterns:
+          - windows-registry
+          - windows-result
 
   - package-ecosystem: github-actions
     directory: /

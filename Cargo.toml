@@ -15,6 +15,7 @@ windows-sys = { version = "0.61.2", features = [
     "Win32_UI_WindowsAndMessaging",
 ] }
 windows-registry = { version = "0.100.0", default-features = false }
+windows-result = { version = "0.100.0", default-features = false }
 
 [profile.release]
 opt-level = "s"

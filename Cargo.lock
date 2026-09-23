@@ -7,6 +7,7 @@ name = "umpv"
 version = "1.0.11"
 dependencies = [
  "windows-registry",
+ "windows-result",
  "windows-sys",
 ]
 
