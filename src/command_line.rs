@@ -104,7 +104,7 @@ pub(crate) fn parse_arguments(
             "--unregister" => mode = mode.or(Some(Mode::Unregister)),
             option => match option.strip_prefix(LOADFILE_OPTION_PREFIX) {
                 Some(text) => loadfile_flags = loadfile_flags.or(Some(text.parse()?)),
-                None => return Err(ArgumentError::UnknownOption(option.to_owned())),
+                None => return Err(ArgumentError::UnknownOption(argument)),
             },
         }
     }
