@@ -86,12 +86,12 @@ impl Pipe {
         &self.0
     }
 
-    /// Freeing the encoded path can overwrite the last error, so it is read first.
     fn wait_for_instance(&self, timeout_milliseconds: u32) -> Result<(), u32> {
         let path_wide = crate::encode_wide(self.path());
         if unsafe { Pipes::WaitNamedPipeW(path_wide.as_ptr(), timeout_milliseconds) } != FALSE {
             return Ok(());
         }
+        // Freeing the encoded path can overwrite the last error, so it is read first.
         Err(unsafe { Foundation::GetLastError() })
     }
 
