@@ -43,9 +43,6 @@ pub(crate) enum SendOutcome {
     NoServer,
 }
 
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
-const INSTANCE_WAIT_MILLISECONDS: u32 = 5;
-
 fn session_id() -> Result<u32, Error> {
     let mut session_id: u32 = 0;
     if unsafe { RemoteDesktop::ProcessIdToSessionId(process::id(), &raw mut session_id) } == FALSE {
@@ -74,6 +71,9 @@ fn loadfile_command(file: &str, loadfile_flags: LoadfileFlags) -> String {
         .replace('\n', "\\n");
     format!("raw loadfile \"{escaped}\" {loadfile_flags}\n")
 }
+
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+const INSTANCE_WAIT_MILLISECONDS: u32 = 5;
 
 pub(crate) struct Pipe(String);
 
