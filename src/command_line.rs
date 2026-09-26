@@ -46,23 +46,23 @@ impl fmt::Display for LoadfileFlags {
 }
 
 impl FromStr for LoadfileFlags {
-    type Err = ArgumentError;
+    type Err = Error;
 
     fn from_str(text: &str) -> Result<Self, Self::Err> {
         Self::ALL
             .iter()
             .copied()
             .find(|flags| flags.as_str() == text)
-            .ok_or_else(|| ArgumentError::UnsupportedLoadfileFlags(text.to_owned()))
+            .ok_or_else(|| Error::UnsupportedLoadfileFlags(text.to_owned()))
     }
 }
 
-pub(crate) enum ArgumentError {
+pub(crate) enum Error {
     UnknownOption(String),
     UnsupportedLoadfileFlags(String),
 }
 
-impl fmt::Display for ArgumentError {
+impl fmt::Display for Error {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::UnknownOption(option) => write!(formatter, "Unknown option: {option}"),
@@ -87,7 +87,7 @@ pub(crate) enum Command {
 
 pub(crate) fn parse_arguments(
     arguments: impl IntoIterator<Item = String>,
-) -> Result<Command, ArgumentError> {
+) -> Result<Command, Error> {
     let mut mode = None;
     let mut loadfile_flags = None;
     let mut file = None;
@@ -104,7 +104,7 @@ pub(crate) fn parse_arguments(
             "--unregister" => mode = mode.or(Some(Mode::Unregister)),
             option => match option.strip_prefix(LOADFILE_OPTION_PREFIX) {
                 Some(text) => loadfile_flags = loadfile_flags.or(Some(text.parse()?)),
-                None => return Err(ArgumentError::UnknownOption(argument)),
+                None => return Err(Error::UnknownOption(argument)),
             },
         }
     }
