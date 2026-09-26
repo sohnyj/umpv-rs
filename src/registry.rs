@@ -28,8 +28,8 @@ impl fmt::Display for Error {
     }
 }
 
-const SUBKEY_FILE_ASSOCIATIONS: &str = r"Software\Clients\Media\mpv\Capabilities\FileAssociations";
-const SUBKEY_CLASSES: &str = r"Software\Classes";
+const FILE_ASSOCIATIONS_SUBKEY: &str = r"Software\Clients\Media\mpv\Capabilities\FileAssociations";
+const CLASSES_SUBKEY: &str = r"Software\Classes";
 const UMPV_PROG_ID: &str = "io.mpv.umpv";
 const MPV_PROG_ID: &str = "io.mpv.file";
 /// A registry key's unnamed default value.
@@ -40,7 +40,7 @@ fn is_not_found(error: &windows_result::Error) -> bool {
 }
 
 fn umpv_prog_id_subkey() -> String {
-    format!(r"{SUBKEY_CLASSES}\{UMPV_PROG_ID}")
+    format!(r"{CLASSES_SUBKEY}\{UMPV_PROG_ID}")
 }
 
 fn notify_shell_change() {
@@ -59,7 +59,7 @@ fn open_file_associations() -> windows_registry::Result<Key> {
         .options()
         .read()
         .write()
-        .open(SUBKEY_FILE_ASSOCIATIONS)
+        .open(FILE_ASSOCIATIONS_SUBKEY)
 }
 
 /// The ProgID comes by value, so a string is built only where one is compared.
