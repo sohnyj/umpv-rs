@@ -58,7 +58,7 @@ fn error_code(error: &io::Error) -> Option<u32> {
     error.raw_os_error().map(i32::cast_unsigned)
 }
 
-fn server_pid(stream: &File) -> Option<u32> {
+fn query_server_pid(stream: &File) -> Option<u32> {
     let mut pid: u32 = 0;
     if unsafe { Pipes::GetNamedPipeServerProcessId(stream.as_raw_handle(), &raw mut pid) } == FALSE
     {
@@ -137,7 +137,7 @@ impl Pipe {
         let Some(mut stream) = self.connect()? else {
             return Ok(SendOutcome::NoServer);
         };
-        let server_pid = server_pid(&stream);
+        let server_pid = query_server_pid(&stream);
         stream
             .write_all(loadfile_command(file, loadfile_flags).as_bytes())
             .map_err(|_| Error::WriteFailed)?;
