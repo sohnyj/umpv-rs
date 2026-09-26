@@ -11,6 +11,8 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{self, MB_OK};
 use windows_sys::core::w;
 
 use crate::command_line::{Command, LoadfileFlags};
+use crate::pipe::{Pipe, SendOutcome};
+use crate::registry::Unregistered;
 
 mod command_line;
 mod lock;
@@ -75,11 +77,11 @@ fn register(loadfile_flags: LoadfileFlags) {
 
 fn unregister() {
     match registry::unregister() {
-        Ok(registry::Unregistered::Nothing) => show_message("Nothing to unregister."),
-        Ok(registry::Unregistered::ProgIdOnly) => {
+        Ok(Unregistered::Nothing) => show_message("Nothing to unregister."),
+        Ok(Unregistered::ProgIdOnly) => {
             show_message("Removed the umpv ProgID.\nNo file extensions were pointing at umpv.");
         }
-        Ok(registry::Unregistered::Extensions(extension_count)) => show_message(&format!(
+        Ok(Unregistered::Extensions(extension_count)) => show_message(&format!(
             "Unregistered for {extension_count} file extension(s)."
         )),
         Err(error) => error_exit(&error),
@@ -105,7 +107,7 @@ impl fmt::Display for OpenError {
 /// `None` when nothing needs raising: a new mpv raises its own window, and an
 /// unidentified instance cannot be found.
 fn open_in_mpv(
-    pipe: &pipe::Pipe,
+    pipe: &Pipe,
     mpv_path: &Path,
     file: &str,
     loadfile_flags: LoadfileFlags,
@@ -117,8 +119,8 @@ fn open_in_mpv(
         .send_loadfile(file, loadfile_flags)
         .map_err(OpenError::Pipe)?
     {
-        pipe::SendOutcome::Sent { server_pid } => Ok(server_pid),
-        pipe::SendOutcome::NoServer => {
+        SendOutcome::Sent { server_pid } => Ok(server_pid),
+        SendOutcome::NoServer => {
             mpv::launch(mpv_path, pipe, file).map_err(OpenError::Mpv)?;
             Ok(None)
         }
@@ -134,7 +136,7 @@ fn open(file: Option<&str>, loadfile_flags: LoadfileFlags) {
     }
     let file = make_absolute(file);
 
-    let pipe = pipe::Pipe::for_current_session().unwrap_or_else(|error| error_exit(&error));
+    let pipe = Pipe::for_current_session().unwrap_or_else(|error| error_exit(&error));
 
     match open_in_mpv(&pipe, &mpv_path(), &file, loadfile_flags) {
         Ok(Some(mpv_pid)) => mpv::activate_window(mpv_pid),
