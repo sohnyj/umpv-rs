@@ -39,8 +39,8 @@ impl fmt::Display for Error {
 }
 
 pub(crate) enum SendOutcome {
-    /// `server_pid` is absent when querying it failed.
     Sent {
+        /// Absent when querying it failed.
         server_pid: Option<u32>,
     },
     NoServer,
