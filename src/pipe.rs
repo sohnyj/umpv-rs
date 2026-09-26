@@ -7,16 +7,13 @@ use std::process;
 use std::time::{Duration, Instant};
 
 use windows_sys::Win32::Foundation::{
-    ERROR_FILE_NOT_FOUND, ERROR_PIPE_BUSY, ERROR_SEM_TIMEOUT, FALSE, GetLastError,
+    self, ERROR_FILE_NOT_FOUND, ERROR_PIPE_BUSY, ERROR_SEM_TIMEOUT, FALSE,
 };
 use windows_sys::Win32::Storage::FileSystem::SECURITY_IDENTIFICATION;
-use windows_sys::Win32::System::Pipes::{
-    GetNamedPipeServerProcessId, NMPWAIT_NOWAIT, WaitNamedPipeW,
-};
-use windows_sys::Win32::System::RemoteDesktop::ProcessIdToSessionId;
+use windows_sys::Win32::System::Pipes::{self, NMPWAIT_NOWAIT};
+use windows_sys::Win32::System::RemoteDesktop;
 
 use crate::command_line::LoadfileFlags;
-use crate::encode_wide;
 
 pub(crate) enum Error {
     SessionIdUnavailable,
@@ -51,7 +48,7 @@ const INSTANCE_WAIT_MILLISECONDS: u32 = 5;
 
 fn session_id() -> Result<u32, Error> {
     let mut session_id: u32 = 0;
-    if unsafe { ProcessIdToSessionId(process::id(), &raw mut session_id) } == FALSE {
+    if unsafe { RemoteDesktop::ProcessIdToSessionId(process::id(), &raw mut session_id) } == FALSE {
         return Err(Error::SessionIdUnavailable);
     }
     Ok(session_id)
@@ -63,7 +60,8 @@ fn error_code(error: &io::Error) -> Option<u32> {
 
 fn server_pid(stream: &File) -> Option<u32> {
     let mut pid: u32 = 0;
-    if unsafe { GetNamedPipeServerProcessId(stream.as_raw_handle(), &raw mut pid) } == FALSE {
+    if unsafe { Pipes::GetNamedPipeServerProcessId(stream.as_raw_handle(), &raw mut pid) } == FALSE
+    {
         return None;
     }
     Some(pid)
@@ -90,11 +88,11 @@ impl Pipe {
 
     /// Freeing the encoded path can overwrite the last error, so it is read first.
     fn wait_for_instance(&self, timeout_milliseconds: u32) -> Result<(), u32> {
-        let path_wide = encode_wide(self.path());
-        if unsafe { WaitNamedPipeW(path_wide.as_ptr(), timeout_milliseconds) } != FALSE {
+        let path_wide = crate::encode_wide(self.path());
+        if unsafe { Pipes::WaitNamedPipeW(path_wide.as_ptr(), timeout_milliseconds) } != FALSE {
             return Ok(());
         }
-        Err(unsafe { GetLastError() })
+        Err(unsafe { Foundation::GetLastError() })
     }
 
     pub(crate) fn server_exists(&self) -> bool {

@@ -13,7 +13,7 @@ use std::path::{self, Path, PathBuf};
 use std::process;
 use std::ptr;
 
-use windows_sys::Win32::UI::WindowsAndMessaging::{MB_OK, MessageBoxW};
+use windows_sys::Win32::UI::WindowsAndMessaging::{self, MB_OK};
 use windows_sys::core::w;
 
 use crate::command_line::{Command, LoadfileFlags};
@@ -25,7 +25,7 @@ fn encode_wide(string: &str) -> Vec<u16> {
 fn show_message(text: &str) {
     let text_wide = encode_wide(text);
     unsafe {
-        MessageBoxW(ptr::null_mut(), text_wide.as_ptr(), w!("umpv"), MB_OK);
+        WindowsAndMessaging::MessageBoxW(ptr::null_mut(), text_wide.as_ptr(), w!("umpv"), MB_OK);
     }
 }
 

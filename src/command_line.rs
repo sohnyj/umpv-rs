@@ -1,6 +1,6 @@
 use std::fmt;
 use std::path::Path;
-use std::str;
+use std::str::FromStr;
 
 enum Mode {
     Register,
@@ -45,7 +45,7 @@ impl fmt::Display for LoadfileFlags {
     }
 }
 
-impl str::FromStr for LoadfileFlags {
+impl FromStr for LoadfileFlags {
     type Err = ArgumentError;
 
     fn from_str(text: &str) -> Result<Self, Self::Err> {

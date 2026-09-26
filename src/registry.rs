@@ -4,7 +4,7 @@ use std::ptr;
 use windows_registry::{CURRENT_USER, Key, Value};
 use windows_result::WIN32_ERROR;
 use windows_sys::Win32::Foundation::ERROR_FILE_NOT_FOUND;
-use windows_sys::Win32::UI::Shell::{SHCNE_ASSOCCHANGED, SHCNF_IDLIST, SHChangeNotify};
+use windows_sys::Win32::UI::Shell::{self, SHCNE_ASSOCCHANGED, SHCNF_IDLIST};
 
 pub(crate) enum Error {
     NoAssociations,
@@ -45,7 +45,7 @@ fn umpv_prog_id_subkey() -> String {
 
 fn notify_shell_change() {
     unsafe {
-        SHChangeNotify(
+        Shell::SHChangeNotify(
             SHCNE_ASSOCCHANGED.cast_signed(),
             SHCNF_IDLIST,
             ptr::null(),
