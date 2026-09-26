@@ -31,7 +31,7 @@ fn show_message(text: &str) {
     }
 }
 
-fn error_exit(error: &dyn fmt::Display) -> ! {
+fn exit_with_error(error: &dyn fmt::Display) -> ! {
     show_message(&error.to_string());
     process::exit(1);
 }
@@ -49,14 +49,14 @@ fn has_url_scheme(argument: &str) -> bool {
 fn make_absolute(path: &str) -> String {
     path::absolute(path)
         .unwrap_or_else(|error| {
-            error_exit(&format!("Failed to make the file path absolute: {error}"))
+            exit_with_error(&format!("Failed to make the file path absolute: {error}"))
         })
         .to_string_lossy()
         .into_owned()
 }
 
 fn umpv_path() -> PathBuf {
-    env::current_exe().unwrap_or_else(|_| error_exit(&"Failed to locate umpv.exe."))
+    env::current_exe().unwrap_or_else(|_| exit_with_error(&"Failed to locate umpv.exe."))
 }
 
 fn mpv_path() -> PathBuf {
@@ -71,7 +71,7 @@ fn register(loadfile_flags: LoadfileFlags) {
         Ok(extension_count) => show_message(&format!(
             "Registered for {extension_count} file extension(s).\nloadfile: {loadfile_flags}"
         )),
-        Err(error) => error_exit(&error),
+        Err(error) => exit_with_error(&error),
     }
 }
 
@@ -84,7 +84,7 @@ fn unregister() {
         Ok(Unregistered::Extensions(extension_count)) => show_message(&format!(
             "Unregistered for {extension_count} file extension(s)."
         )),
-        Err(error) => error_exit(&error),
+        Err(error) => exit_with_error(&error),
     }
 }
 
@@ -132,16 +132,16 @@ fn open(file: Option<&str>, loadfile_flags: LoadfileFlags) {
         return;
     };
     if has_url_scheme(file) {
-        error_exit(&"URLs are not supported.\nOnly local files can be opened.");
+        exit_with_error(&"URLs are not supported.\nOnly local files can be opened.");
     }
     let file = make_absolute(file);
 
-    let pipe = Pipe::for_current_session().unwrap_or_else(|error| error_exit(&error));
+    let pipe = Pipe::for_current_session().unwrap_or_else(|error| exit_with_error(&error));
 
     match open_in_mpv(&pipe, &mpv_path(), &file, loadfile_flags) {
         Ok(Some(mpv_pid)) => mpv::activate_window(mpv_pid),
         Ok(None) => {}
-        Err(error) => error_exit(&error),
+        Err(error) => exit_with_error(&error),
     }
 }
 
@@ -153,6 +153,6 @@ fn main() {
             file,
             loadfile_flags,
         }) => open(file.as_deref(), loadfile_flags),
-        Err(error) => error_exit(&error),
+        Err(error) => exit_with_error(&error),
     }
 }
