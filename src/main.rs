@@ -1,11 +1,5 @@
 #![windows_subsystem = "windows"]
 
-mod command_line;
-mod lock;
-mod mpv;
-mod pipe;
-mod registry;
-
 use std::env;
 use std::fmt;
 use std::iter;
@@ -17,6 +11,12 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{self, MB_OK};
 use windows_sys::core::w;
 
 use crate::command_line::{Command, LoadfileFlags};
+
+mod command_line;
+mod lock;
+mod mpv;
+mod pipe;
+mod registry;
 
 fn encode_wide(string: &str) -> Vec<u16> {
     string.encode_utf16().chain(iter::once(0)).collect()
