@@ -113,13 +113,15 @@ fn open_in_mpv(
     // Showing an error here would hold the lock until its message box is closed.
     let _lock_guard = lock::acquire().map_err(OpenError::Lock)?;
 
-    match pipe.send_loadfile(file, loadfile_flags) {
-        Ok(pipe::SendOutcome::Sent { server_pid }) => Ok(server_pid),
-        Ok(pipe::SendOutcome::NoServer) => {
+    match pipe
+        .send_loadfile(file, loadfile_flags)
+        .map_err(OpenError::Pipe)?
+    {
+        pipe::SendOutcome::Sent { server_pid } => Ok(server_pid),
+        pipe::SendOutcome::NoServer => {
             mpv::launch(mpv_path, pipe, file).map_err(OpenError::Mpv)?;
             Ok(None)
         }
-        Err(error) => Err(OpenError::Pipe(error)),
     }
 }
 
