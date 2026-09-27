@@ -52,7 +52,6 @@ jobs:
         with:
           name: umpv
           path: umpv-rs.7z
-          retention-days: 1
 
       - name: Remove existing release/tag if it already exists
         if: inputs.upload_release
