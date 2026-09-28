@@ -58,7 +58,8 @@ Points the extensions back at mpv. Defaults set by other applications are not re
 umpv is built from Linux (including WSL) for the `x86_64-pc-windows-msvc` target.
 
 ```bash
-sudo apt-get install -y build-essential llvm clang lld
+sudo apt-get update
+sudo apt-get install -y build-essential llvm
 
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source ~/.cargo/env
