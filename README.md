@@ -5,7 +5,7 @@ A single-instance mpv launcher for Windows. Opens files in a running mpv window 
 ## Minimum Requirements
 
 - **OS**: Windows 10 (x64)
-- **CPU**: x86-64-v3 (AVX2 support required)
+- **CPU**: x86-64
 
 ## Usage
 
