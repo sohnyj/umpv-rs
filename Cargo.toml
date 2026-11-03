@@ -16,6 +16,7 @@ windows-sys = { version = "0.61.2", features = [
 ] }
 windows-registry = { version = "0.100.0", default-features = false }
 windows-result = { version = "0.100.0", default-features = false }
+serde_json = { version = "1.0.154", default-features = false, features = ["alloc"] }
 
 [profile.release]
 opt-level = "s"

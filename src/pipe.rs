@@ -6,6 +6,7 @@ use std::os::windows::io::AsRawHandle;
 use std::process;
 use std::time::{Duration, Instant};
 
+use serde_json::json;
 use windows_sys::Win32::Foundation::{
     self, ERROR_FILE_NOT_FOUND, ERROR_PIPE_BUSY, ERROR_SEM_TIMEOUT, FALSE,
 };
@@ -64,12 +65,12 @@ fn query_server_pid(stream: &File) -> Option<u32> {
     Some(pid)
 }
 
+/// Array commands do not expand properties, so the file name reaches mpv as is.
 fn loadfile_command(file: &str, loadfile_flags: LoadfileFlags) -> String {
-    let escaped = file
-        .replace('\\', r"\\")
-        .replace('"', "\\\"")
-        .replace('\n', "\\n");
-    format!("raw loadfile \"{escaped}\" {loadfile_flags}\n")
+    let message = json!({
+        "command": ["loadfile", file, loadfile_flags.to_string()],
+    });
+    format!("{message}\n")
 }
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
