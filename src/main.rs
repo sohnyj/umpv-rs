@@ -69,7 +69,7 @@ fn register(loadfile_flags: LoadfileFlags) {
         loadfile_flags,
     )) {
         Ok(extension_count) => show_message(&format!(
-            "Registered for {extension_count} file extension(s).\nloadfile: {loadfile_flags}"
+            "Registered extensions: {extension_count}\nloadfile: {loadfile_flags}"
         )),
         Err(error) => exit_with_error(&error),
     }
@@ -81,9 +81,9 @@ fn unregister() {
         Ok(Unregistered::ProgIdOnly) => {
             show_message("Removed the umpv ProgID.\nNo file extensions were pointing at umpv.");
         }
-        Ok(Unregistered::Extensions(extension_count)) => show_message(&format!(
-            "Unregistered for {extension_count} file extension(s)."
-        )),
+        Ok(Unregistered::Extensions(extension_count)) => {
+            show_message(&format!("Unregistered extensions: {extension_count}"))
+        }
         Err(error) => exit_with_error(&error),
     }
 }
