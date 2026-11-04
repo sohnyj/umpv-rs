@@ -4,7 +4,12 @@ version = "1.1.2"
 edition = "2024"
 
 [dependencies]
-windows-sys = { version = "0.61.2", features = [
+serde_json = { version = "1.0.154", default-features = false, features = ["alloc"] }
+windows-registry = { version = "0.100.0", default-features = false }
+windows-result = { version = "0.100.0", default-features = false }
+
+[dependencies.windows-sys]
+features = [
     "Win32_Foundation",
     "Win32_Security",
     "Win32_Storage_FileSystem",
@@ -13,14 +18,12 @@ windows-sys = { version = "0.61.2", features = [
     "Win32_System_Threading",
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
-] }
-windows-registry = { version = "0.100.0", default-features = false }
-windows-result = { version = "0.100.0", default-features = false }
-serde_json = { version = "1.0.154", default-features = false, features = ["alloc"] }
+]
+version = "0.61.2"
 
 [profile.release]
-opt-level = "s"
-strip = true
-lto = true
-panic = "abort"
 codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
