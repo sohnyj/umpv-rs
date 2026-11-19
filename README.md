@@ -75,3 +75,7 @@ Output: `target/x86_64-pc-windows-msvc/release/umpv.exe`
 ## Acknowledgements
 
 `umpv.ico` is a colorized version of the `video-clip` icon from Microsoft's [Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons) (MIT License).
+
+## License
+
+Licensed under the GNU General Public License v3.0 or later.
