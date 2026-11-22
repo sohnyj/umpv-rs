@@ -1,7 +1,9 @@
 #![windows_subsystem = "windows"]
 
 use std::env;
+use std::ffi::OsString;
 use std::fmt;
+use std::io;
 use std::iter;
 use std::path::{self, Path, PathBuf};
 use std::process;
@@ -38,6 +40,42 @@ fn exit_with_error(error: &dyn fmt::Display) -> ! {
     process::exit(1);
 }
 
+enum Error {
+    UmpvPathUnavailable,
+    UnsupportedUrl,
+    AbsolutePathFailed(io::Error),
+    NonUnicodePath(OsString),
+    Registry(registry::Error),
+    Lock(lock::Error),
+    Pipe(pipe::Error),
+    Mpv(mpv::Error),
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::UmpvPathUnavailable => formatter.write_str("Failed to locate umpv.exe."),
+            Self::UnsupportedUrl => {
+                formatter.write_str("URLs are not supported.\nOnly local files can be opened.")
+            }
+            Self::AbsolutePathFailed(error) => {
+                write!(formatter, "Failed to make the file path absolute: {error}")
+            }
+            Self::NonUnicodePath(path) => {
+                write!(
+                    formatter,
+                    "File path is not valid Unicode: {}",
+                    path.display()
+                )
+            }
+            Self::Registry(error) => fmt::Display::fmt(error, formatter),
+            Self::Lock(error) => fmt::Display::fmt(error, formatter),
+            Self::Pipe(error) => fmt::Display::fmt(error, formatter),
+            Self::Mpv(error) => fmt::Display::fmt(error, formatter),
+        }
+    }
+}
+
 fn has_url_scheme(argument: &str) -> bool {
     let Some((scheme, _)) = argument.split_once("://") else {
         return false;
@@ -48,68 +86,42 @@ fn has_url_scheme(argument: &str) -> bool {
         })
 }
 
-fn make_absolute(path: &str) -> String {
+fn make_absolute(path: &str) -> Result<String, Error> {
     path::absolute(path)
-        .unwrap_or_else(|error| {
-            exit_with_error(&format!("Failed to make the file path absolute: {error}"))
-        })
+        .map_err(Error::AbsolutePathFailed)?
         .into_os_string()
         .into_string()
-        .unwrap_or_else(|path| {
-            exit_with_error(&format!(
-                "File path is not valid Unicode: {}",
-                path.display()
-            ))
-        })
+        .map_err(Error::NonUnicodePath)
 }
 
-fn umpv_path() -> PathBuf {
-    env::current_exe().unwrap_or_else(|_| exit_with_error(&"Failed to locate umpv.exe."))
+fn umpv_path() -> Result<PathBuf, Error> {
+    env::current_exe().map_err(|_| Error::UmpvPathUnavailable)
 }
 
-fn mpv_path() -> PathBuf {
-    umpv_path().with_file_name("mpv.exe")
+fn mpv_path() -> Result<PathBuf, Error> {
+    Ok(umpv_path()?.with_file_name("mpv.exe"))
 }
 
-fn register(loadfile_flags: LoadfileFlags) {
-    match registry::register(&command_line::shell_open_command(
-        &umpv_path(),
-        loadfile_flags,
-    )) {
-        Ok(extension_count) => show_message(&format!(
-            "Registered extensions: {extension_count}\nloadfile: {loadfile_flags}"
-        )),
-        Err(error) => exit_with_error(&error),
-    }
+fn register(loadfile_flags: LoadfileFlags) -> Result<(), Error> {
+    let shell_open_command = command_line::shell_open_command(&umpv_path()?, loadfile_flags);
+    let extension_count = registry::register(&shell_open_command).map_err(Error::Registry)?;
+    show_message(&format!(
+        "Registered extensions: {extension_count}\nloadfile: {loadfile_flags}"
+    ));
+    Ok(())
 }
 
-fn unregister() {
-    match registry::unregister() {
-        Ok(Unregistered::Nothing) => show_message("Nothing to unregister."),
-        Ok(Unregistered::ProgIdOnly) => {
+fn unregister() -> Result<(), Error> {
+    match registry::unregister().map_err(Error::Registry)? {
+        Unregistered::Nothing => show_message("Nothing to unregister."),
+        Unregistered::ProgIdOnly => {
             show_message("Removed the umpv ProgID.\nNo file extensions were pointing at umpv.");
         }
-        Ok(Unregistered::Extensions(extension_count)) => {
-            show_message(&format!("Unregistered extensions: {extension_count}"))
-        }
-        Err(error) => exit_with_error(&error),
-    }
-}
-
-enum OpenError {
-    Lock(lock::Error),
-    Pipe(pipe::Error),
-    Mpv(mpv::Error),
-}
-
-impl fmt::Display for OpenError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Lock(error) => fmt::Display::fmt(error, formatter),
-            Self::Pipe(error) => fmt::Display::fmt(error, formatter),
-            Self::Mpv(error) => fmt::Display::fmt(error, formatter),
+        Unregistered::Extensions(extension_count) => {
+            show_message(&format!("Unregistered extensions: {extension_count}"));
         }
     }
+    Ok(())
 }
 
 /// `None` when nothing needs raising: a new mpv raises its own window, and an
@@ -119,48 +131,54 @@ fn open_in_mpv(
     mpv_path: &Path,
     file: &str,
     loadfile_flags: LoadfileFlags,
-) -> Result<Option<u32>, OpenError> {
+) -> Result<Option<u32>, Error> {
     // Showing an error here would hold the lock until its message box is closed.
-    let _lock_guard = lock::acquire().map_err(OpenError::Lock)?;
+    let _lock_guard = lock::acquire().map_err(Error::Lock)?;
 
     match pipe
         .send_loadfile(file, loadfile_flags)
-        .map_err(OpenError::Pipe)?
+        .map_err(Error::Pipe)?
     {
         SendOutcome::Sent { server_pid } => Ok(server_pid),
         SendOutcome::NoServer => {
-            mpv::launch(mpv_path, pipe, file).map_err(OpenError::Mpv)?;
+            mpv::launch(mpv_path, pipe, file).map_err(Error::Mpv)?;
             Ok(None)
         }
     }
 }
 
-fn open(file: Option<&str>, loadfile_flags: LoadfileFlags) {
+fn open(file: Option<&str>, loadfile_flags: LoadfileFlags) -> Result<(), Error> {
     let Some(file) = file else {
-        return;
+        return Ok(());
     };
     if has_url_scheme(file) {
-        exit_with_error(&"URLs are not supported.\nOnly local files can be opened.");
+        return Err(Error::UnsupportedUrl);
     }
-    let file = make_absolute(file);
+    let file = make_absolute(file)?;
 
-    let pipe = Pipe::for_current_session().unwrap_or_else(|error| exit_with_error(&error));
+    let pipe = Pipe::for_current_session().map_err(Error::Pipe)?;
 
-    match open_in_mpv(&pipe, &mpv_path(), &file, loadfile_flags) {
-        Ok(Some(mpv_pid)) => mpv::activate_window(mpv_pid),
-        Ok(None) => {}
-        Err(error) => exit_with_error(&error),
+    if let Some(mpv_pid) = open_in_mpv(&pipe, &mpv_path()?, &file, loadfile_flags)? {
+        mpv::activate_window(mpv_pid);
+    }
+    Ok(())
+}
+
+fn run(command: Command) -> Result<(), Error> {
+    match command {
+        Command::Register { loadfile_flags } => register(loadfile_flags),
+        Command::Unregister => unregister(),
+        Command::Open {
+            file,
+            loadfile_flags,
+        } => open(file.as_deref(), loadfile_flags),
     }
 }
 
 fn main() {
-    match command_line::parse_arguments(env::args_os().skip(1)) {
-        Ok(Command::Register { loadfile_flags }) => register(loadfile_flags),
-        Ok(Command::Unregister) => unregister(),
-        Ok(Command::Open {
-            file,
-            loadfile_flags,
-        }) => open(file.as_deref(), loadfile_flags),
-        Err(error) => exit_with_error(&error),
+    let command = command_line::parse_arguments(env::args_os().skip(1))
+        .unwrap_or_else(|error| exit_with_error(&error));
+    if let Err(error) = run(command) {
+        exit_with_error(&error);
     }
 }
