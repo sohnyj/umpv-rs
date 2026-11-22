@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::json;
 use windows_sys::Win32::Foundation::{
-    self, ERROR_FILE_NOT_FOUND, ERROR_PIPE_BUSY, ERROR_SEM_TIMEOUT, FALSE,
+    ERROR_FILE_NOT_FOUND, ERROR_PIPE_BUSY, ERROR_SEM_TIMEOUT, FALSE,
 };
 use windows_sys::Win32::Storage::FileSystem::SECURITY_IDENTIFICATION;
 use windows_sys::Win32::System::Pipes::{self, NMPWAIT_NOWAIT};
@@ -89,21 +89,20 @@ impl Pipe {
         &self.0
     }
 
-    fn wait_for_instance(&self, timeout_milliseconds: u32) -> Result<(), u32> {
+    fn wait_for_instance(&self, timeout_milliseconds: u32) -> io::Result<()> {
         let path_wide = crate::encode_wide(self.path());
         // SAFETY: path_wide NUL-terminated by encode_wide and outlives call.
         if unsafe { Pipes::WaitNamedPipeW(path_wide.as_ptr(), timeout_milliseconds) } != FALSE {
             return Ok(());
         }
         // Freeing the encoded path can overwrite the last error, so it is read first.
-        // SAFETY: no arguments; reads calling thread's last-error value.
-        Err(unsafe { Foundation::GetLastError() })
+        Err(io::Error::last_os_error())
     }
 
     pub(crate) fn server_exists(&self) -> bool {
         match self.wait_for_instance(NMPWAIT_NOWAIT) {
             Ok(()) => true,
-            Err(last_error) => last_error == ERROR_SEM_TIMEOUT,
+            Err(error) => error_code(&error) == Some(ERROR_SEM_TIMEOUT),
         }
     }
 
