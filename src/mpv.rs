@@ -41,6 +41,7 @@ pub(crate) fn launch(mpv_path: &Path, pipe: &Pipe, file: &str) -> Result<(), Err
         .arg(file)
         .spawn()
         .map_err(Error::SpawnFailed)?;
+    // SAFETY: no pointer arguments; any process id accepted.
     unsafe { WindowsAndMessaging::AllowSetForegroundWindow(mpv_process.id()) };
     wait_for_ipc_server(pipe, &mpv_process)
 }
@@ -54,6 +55,7 @@ fn wait_for_ipc_server(pipe: &Pipe, mpv_process: &Child) -> Result<(), Error> {
         if Instant::now() >= timeout_at {
             return Err(Error::StartupTimedOut);
         }
+        // SAFETY: mpv_process owns an open process handle for duration of call.
         match unsafe {
             Threading::WaitForSingleObject(mpv_process.as_raw_handle(), POLL_INTERVAL_MILLISECONDS)
         } {
@@ -69,6 +71,8 @@ const MPV_WINDOW_CLASS_NAME: PCWSTR = w!("mpv");
 fn find_window(pid: u32) -> Option<HWND> {
     let mut hwnd: HWND = ptr::null_mut();
     loop {
+        // SAFETY: null parent searches top-level windows; hwnd is null or previous result;
+        // class name is NUL-terminated w! literal; null title matches any.
         hwnd = unsafe {
             WindowsAndMessaging::FindWindowExW(
                 ptr::null_mut(),
@@ -81,6 +85,7 @@ fn find_window(pid: u32) -> Option<HWND> {
             return None;
         }
         let mut window_pid: u32 = 0;
+        // SAFETY: window_pid is writable u32; stale hwnd only fails call.
         unsafe { WindowsAndMessaging::GetWindowThreadProcessId(hwnd, &raw mut window_pid) };
         if window_pid == pid {
             return Some(hwnd);
@@ -92,8 +97,11 @@ pub(crate) fn activate_window(pid: u32) {
     let Some(hwnd) = find_window(pid) else {
         return;
     };
+    // SAFETY: hwnd is not dereferenced; stale handle only fails call.
     if unsafe { WindowsAndMessaging::IsIconic(hwnd) } != FALSE {
+        // SAFETY: hwnd is not dereferenced; stale handle only fails call.
         unsafe { WindowsAndMessaging::ShowWindow(hwnd, SW_RESTORE) };
     }
+    // SAFETY: hwnd is not dereferenced; stale handle only fails call.
     unsafe { WindowsAndMessaging::SetForegroundWindow(hwnd) };
 }

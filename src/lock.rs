@@ -28,6 +28,7 @@ pub(crate) struct Guard(OwnedHandle);
 
 impl Drop for Guard {
     fn drop(&mut self) {
+        // SAFETY: self.0 owns an open mutex handle; closed only after this call.
         unsafe { Threading::ReleaseMutex(self.0.as_raw_handle()) };
     }
 }
@@ -38,12 +39,15 @@ const MUTEX_NAME: PCWSTR = w!(r"Local\umpv_lock");
 const ACQUIRE_TIMEOUT_MILLISECONDS: u32 = 10_000;
 
 pub(crate) fn acquire() -> Result<Guard, Error> {
+    // SAFETY: null security attributes select defaults; MUTEX_NAME is NUL-terminated w! literal.
     let handle = unsafe { Threading::CreateMutexW(ptr::null(), FALSE, MUTEX_NAME) };
     if handle.is_null() {
         return Err(Error::CreateFailed);
     }
+    // SAFETY: handle non-null, fresh from CreateMutexW, not owned elsewhere.
     let mutex = unsafe { OwnedHandle::from_raw_handle(handle) };
 
+    // SAFETY: mutex owns an open handle for duration of call.
     match unsafe {
         Threading::WaitForSingleObject(mutex.as_raw_handle(), ACQUIRE_TIMEOUT_MILLISECONDS)
     } {
