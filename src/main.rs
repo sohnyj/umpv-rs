@@ -53,8 +53,14 @@ fn make_absolute(path: &str) -> String {
         .unwrap_or_else(|error| {
             exit_with_error(&format!("Failed to make the file path absolute: {error}"))
         })
-        .to_string_lossy()
-        .into_owned()
+        .into_os_string()
+        .into_string()
+        .unwrap_or_else(|path| {
+            exit_with_error(&format!(
+                "File path is not valid Unicode: {}",
+                path.display()
+            ))
+        })
 }
 
 fn umpv_path() -> PathBuf {
@@ -148,7 +154,7 @@ fn open(file: Option<&str>, loadfile_flags: LoadfileFlags) {
 }
 
 fn main() {
-    match command_line::parse_arguments(env::args().skip(1)) {
+    match command_line::parse_arguments(env::args_os().skip(1)) {
         Ok(Command::Register { loadfile_flags }) => register(loadfile_flags),
         Ok(Command::Unregister) => unregister(),
         Ok(Command::Open {

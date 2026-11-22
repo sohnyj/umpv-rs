@@ -1,3 +1,4 @@
+use std::ffi::OsString;
 use std::fmt;
 use std::path::Path;
 use std::str::FromStr;
@@ -58,6 +59,7 @@ impl FromStr for LoadfileFlags {
 }
 
 pub(crate) enum Error {
+    NonUnicodeArgument(OsString),
     UnknownOption(String),
     UnsupportedLoadfileFlags(String),
 }
@@ -65,6 +67,13 @@ pub(crate) enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::NonUnicodeArgument(argument) => {
+                write!(
+                    formatter,
+                    "Argument is not valid Unicode: {}",
+                    argument.display()
+                )
+            }
             Self::UnknownOption(option) => write!(formatter, "Unknown option: {option}"),
             Self::UnsupportedLoadfileFlags(loadfile_flags) => {
                 write!(formatter, "Unsupported loadfile flags: {loadfile_flags}")
@@ -86,7 +95,7 @@ pub(crate) enum Command {
 }
 
 pub(crate) fn parse_arguments(
-    arguments: impl IntoIterator<Item = String>,
+    arguments: impl IntoIterator<Item = OsString>,
 ) -> Result<Command, Error> {
     let mut mode = None;
     let mut loadfile_flags = None;
@@ -94,6 +103,7 @@ pub(crate) fn parse_arguments(
     let mut past_end_of_options = false;
 
     for argument in arguments {
+        let argument = argument.into_string().map_err(Error::NonUnicodeArgument)?;
         if past_end_of_options || !argument.starts_with("--") {
             file = file.or(Some(argument));
             continue;
