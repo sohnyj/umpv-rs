@@ -1,13 +1,12 @@
 use std::fmt;
 use std::io;
-use std::os::windows::io::AsRawHandle;
 use std::path::Path;
 use std::process::{Child, Command};
 use std::ptr;
+use std::thread;
 use std::time::{Duration, Instant};
 
-use windows_sys::Win32::Foundation::{FALSE, HWND, WAIT_OBJECT_0, WAIT_TIMEOUT};
-use windows_sys::Win32::System::Threading;
+use windows_sys::Win32::Foundation::{FALSE, HWND};
 use windows_sys::Win32::UI::WindowsAndMessaging::{self, SW_RESTORE};
 use windows_sys::core::w;
 
@@ -32,10 +31,10 @@ impl fmt::Display for Error {
 }
 
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(5);
-const POLL_INTERVAL_MILLISECONDS: u32 = 5;
+const POLL_INTERVAL: Duration = Duration::from_millis(5);
 
 pub(crate) fn launch(mpv_path: &Path, pipe: &Pipe, file: &str) -> Result<(), Error> {
-    let mpv_process = Command::new(mpv_path)
+    let mut mpv_process = Command::new(mpv_path)
         .arg(format!("--input-ipc-server={}", pipe.path()))
         .arg("--")
         .arg(file)
@@ -43,10 +42,10 @@ pub(crate) fn launch(mpv_path: &Path, pipe: &Pipe, file: &str) -> Result<(), Err
         .map_err(Error::SpawnFailed)?;
     // SAFETY: no pointer arguments; any process id accepted.
     unsafe { WindowsAndMessaging::AllowSetForegroundWindow(mpv_process.id()) };
-    wait_for_ipc_server(pipe, &mpv_process)
+    wait_for_ipc_server(pipe, &mut mpv_process)
 }
 
-fn wait_for_ipc_server(pipe: &Pipe, mpv_process: &Child) -> Result<(), Error> {
+fn wait_for_ipc_server(pipe: &Pipe, mpv_process: &mut Child) -> Result<(), Error> {
     let timeout_at = Instant::now() + STARTUP_TIMEOUT;
     loop {
         if pipe.server_exists() {
@@ -55,13 +54,10 @@ fn wait_for_ipc_server(pipe: &Pipe, mpv_process: &Child) -> Result<(), Error> {
         if Instant::now() >= timeout_at {
             return Err(Error::StartupTimedOut);
         }
-        // SAFETY: mpv_process owns an open process handle for duration of call.
-        match unsafe {
-            Threading::WaitForSingleObject(mpv_process.as_raw_handle(), POLL_INTERVAL_MILLISECONDS)
-        } {
-            WAIT_TIMEOUT => {}
-            WAIT_OBJECT_0 => return Err(Error::Exited),
-            _ => return Err(Error::WaitFailed),
+        match mpv_process.try_wait() {
+            Ok(None) => thread::sleep(POLL_INTERVAL),
+            Ok(Some(_)) => return Err(Error::Exited),
+            Err(_) => return Err(Error::WaitFailed),
         }
     }
 }
