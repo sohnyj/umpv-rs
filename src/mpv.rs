@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 use windows_sys::Win32::Foundation::{FALSE, HWND, WAIT_OBJECT_0, WAIT_TIMEOUT};
 use windows_sys::Win32::System::Threading;
 use windows_sys::Win32::UI::WindowsAndMessaging::{self, SW_RESTORE};
-use windows_sys::core::{PCWSTR, w};
+use windows_sys::core::w;
 
 use crate::pipe::Pipe;
 
@@ -66,20 +66,13 @@ fn wait_for_ipc_server(pipe: &Pipe, mpv_process: &Child) -> Result<(), Error> {
     }
 }
 
-const MPV_WINDOW_CLASS_NAME: PCWSTR = w!("mpv");
-
 fn find_window(pid: u32) -> Option<HWND> {
     let mut hwnd: HWND = ptr::null_mut();
     loop {
         // SAFETY: null parent searches top-level windows; hwnd is null or previous result;
         // class name is NUL-terminated w! literal; null title matches any.
         hwnd = unsafe {
-            WindowsAndMessaging::FindWindowExW(
-                ptr::null_mut(),
-                hwnd,
-                MPV_WINDOW_CLASS_NAME,
-                ptr::null(),
-            )
+            WindowsAndMessaging::FindWindowExW(ptr::null_mut(), hwnd, w!("mpv"), ptr::null())
         };
         if hwnd.is_null() {
             return None;

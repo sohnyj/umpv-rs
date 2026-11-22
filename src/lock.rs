@@ -4,7 +4,7 @@ use std::ptr;
 
 use windows_sys::Win32::Foundation::{FALSE, WAIT_ABANDONED, WAIT_OBJECT_0, WAIT_TIMEOUT};
 use windows_sys::Win32::System::Threading;
-use windows_sys::core::{PCWSTR, w};
+use windows_sys::core::w;
 
 pub(crate) enum Error {
     CreateFailed,
@@ -33,14 +33,13 @@ impl Drop for Guard {
     }
 }
 
-const MUTEX_NAME: PCWSTR = w!(r"Local\umpv_lock");
 // Must stay at or above pipe::CONNECT_TIMEOUT + mpv::STARTUP_TIMEOUT, the
 // longest the holder can take, or another instance times out while waiting.
 const ACQUIRE_TIMEOUT_MILLISECONDS: u32 = 10_000;
 
 pub(crate) fn acquire() -> Result<Guard, Error> {
-    // SAFETY: null security attributes select defaults; MUTEX_NAME is NUL-terminated w! literal.
-    let handle = unsafe { Threading::CreateMutexW(ptr::null(), FALSE, MUTEX_NAME) };
+    // SAFETY: null security attributes select defaults; name is NUL-terminated w! literal.
+    let handle = unsafe { Threading::CreateMutexW(ptr::null(), FALSE, w!(r"Local\umpv_lock")) };
     if handle.is_null() {
         return Err(Error::CreateFailed);
     }
