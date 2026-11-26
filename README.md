@@ -13,7 +13,7 @@ A single-instance mpv launcher for Windows. Opens files in a running mpv window 
 
 ### 1. Register extensions with mpv
 
-Specify the extensions you want; leave a category empty (`=`) to skip it. See [mpv's `--register`](https://mpv.io/manual/master/#options-register).
+Specify the extensions to register. Leave a category empty (`=`) to skip it. See [mpv's `--register`](https://mpv.io/manual/master/#options-register).
 
 ```bat
 .\mpv.com --register --video-exts=mp4,mkv --audio-exts= --image-exts= --archive-exts= --playlist-exts=
@@ -27,9 +27,10 @@ Specify the extensions you want; leave a category empty (`=`) to skip it. See [m
 
 Only extensions registered in step 1 are processed. `--loadfile=` is optional and defaults to `replace`.
 
+To make umpv the default for each extension, go to Windows Settings > Apps > Default apps > mpv, and select umpv.
+
 > [!NOTE]
-> Per-user associations only (`HKEY_CURRENT_USER`); administrator is neither required nor supported.
-> To make umpv the default for each extension, go to Windows Settings > Apps > Default apps > mpv, and select umpv.
+> Associations are registered per user under `HKEY_CURRENT_USER`. Administrator privileges are neither required nor supported.
 
 ### 3. Unregister
 
@@ -37,7 +38,7 @@ Only extensions registered in step 1 are processed. `--loadfile=` is optional an
 .\umpv.exe --unregister
 ```
 
-Points the extensions back at mpv. Defaults set by other applications are not restored.
+Points the extensions back at mpv and removes all registry entries umpv created (`HKEY_CURRENT_USER\Software\Classes\io.mpv.umpv`). Defaults set by other applications are not restored.
 
 ## Loadfile modes
 
