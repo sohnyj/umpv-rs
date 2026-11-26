@@ -46,7 +46,7 @@ pub(crate) enum SendOutcome {
 
 fn session_id() -> Result<u32, Error> {
     let mut session_id: u32 = 0;
-    // SAFETY: session_id is writable u32.
+    // SAFETY: `session_id` is writable `u32`.
     if unsafe { RemoteDesktop::ProcessIdToSessionId(process::id(), &raw mut session_id) } == FALSE {
         return Err(Error::SessionIdUnavailable);
     }
@@ -59,7 +59,8 @@ fn error_code(error: &io::Error) -> Option<u32> {
 
 fn query_server_pid(stream: &File) -> Option<u32> {
     let mut pid: u32 = 0;
-    // SAFETY: stream owns an open pipe handle for duration of call; pid is writable u32.
+    // SAFETY: `stream` owns an open pipe handle for duration of call.
+    // `pid` is writable `u32`.
     if unsafe { Pipes::GetNamedPipeServerProcessId(stream.as_raw_handle(), &raw mut pid) } == FALSE
     {
         return None;
@@ -91,7 +92,7 @@ impl Pipe {
 
     fn wait_for_instance(&self, timeout_milliseconds: u32) -> io::Result<()> {
         let path_wide = crate::encode_wide(self.path());
-        // SAFETY: path_wide NUL-terminated by encode_wide and outlives call.
+        // SAFETY: `path_wide` is NUL-terminated by `encode_wide` and outlives call.
         if unsafe { Pipes::WaitNamedPipeW(path_wide.as_ptr(), timeout_milliseconds) } != FALSE {
             return Ok(());
         }

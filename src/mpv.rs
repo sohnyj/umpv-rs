@@ -40,7 +40,7 @@ pub(crate) fn launch(mpv_path: &Path, pipe: &Pipe, file: &str) -> Result<(), Err
         .arg(file)
         .spawn()
         .map_err(Error::SpawnFailed)?;
-    // SAFETY: no pointer arguments; any process id accepted.
+    // SAFETY: No pointer arguments. Invalid process id only fails call.
     unsafe { WindowsAndMessaging::AllowSetForegroundWindow(mpv_process.id()) };
     wait_for_ipc_server(pipe, &mut mpv_process)
 }
@@ -65,8 +65,8 @@ fn wait_for_ipc_server(pipe: &Pipe, mpv_process: &mut Child) -> Result<(), Error
 fn find_window(pid: u32) -> Option<HWND> {
     let mut hwnd: HWND = ptr::null_mut();
     loop {
-        // SAFETY: null parent searches top-level windows; hwnd is null or previous result;
-        // class name is NUL-terminated w! literal; null title matches any.
+        // SAFETY: Null parent searches top-level windows. `hwnd` is null or previous
+        // result. Class name is NUL-terminated `w!` literal. Null title matches any.
         hwnd = unsafe {
             WindowsAndMessaging::FindWindowExW(ptr::null_mut(), hwnd, w!("mpv"), ptr::null())
         };
@@ -74,7 +74,7 @@ fn find_window(pid: u32) -> Option<HWND> {
             return None;
         }
         let mut window_pid: u32 = 0;
-        // SAFETY: window_pid is writable u32; stale hwnd only fails call.
+        // SAFETY: `window_pid` is writable `u32`. Stale `hwnd` only fails call.
         unsafe { WindowsAndMessaging::GetWindowThreadProcessId(hwnd, &raw mut window_pid) };
         if window_pid == pid {
             return Some(hwnd);
@@ -86,11 +86,11 @@ pub(crate) fn activate_window(pid: u32) {
     let Some(hwnd) = find_window(pid) else {
         return;
     };
-    // SAFETY: hwnd is not dereferenced; stale handle only fails call.
+    // SAFETY: `hwnd` is not dereferenced. Stale handle only fails call.
     if unsafe { WindowsAndMessaging::IsIconic(hwnd) } != FALSE {
-        // SAFETY: hwnd is not dereferenced; stale handle only fails call.
+        // SAFETY: `hwnd` is not dereferenced. Stale handle only fails call.
         unsafe { WindowsAndMessaging::ShowWindow(hwnd, SW_RESTORE) };
     }
-    // SAFETY: hwnd is not dereferenced; stale handle only fails call.
+    // SAFETY: `hwnd` is not dereferenced. Stale handle only fails call.
     unsafe { WindowsAndMessaging::SetForegroundWindow(hwnd) };
 }

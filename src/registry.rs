@@ -44,7 +44,7 @@ fn umpv_prog_id_subkey() -> String {
 }
 
 fn notify_shell_change() {
-    // SAFETY: SHCNE_ASSOCCHANGED requires both item pointers null.
+    // SAFETY: `SHCNE_ASSOCCHANGED` requires both item pointers null.
     unsafe {
         Shell::SHChangeNotify(
             SHCNE_ASSOCCHANGED.cast_signed(),
