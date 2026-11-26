@@ -41,7 +41,6 @@ fn exit_with_error(error: &dyn fmt::Display) -> ! {
 }
 
 enum Error {
-    UmpvPathUnavailable,
     UnsupportedUrl,
     AbsolutePathFailed(io::Error),
     NonUnicodePath(OsString),
@@ -54,7 +53,6 @@ enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::UmpvPathUnavailable => formatter.write_str("Failed to locate umpv.exe."),
             Self::UnsupportedUrl => {
                 formatter.write_str("URLs are not supported.\nOnly local files can be opened.")
             }
@@ -94,16 +92,16 @@ fn make_absolute(path: &str) -> Result<String, Error> {
         .map_err(Error::NonUnicodePath)
 }
 
-fn umpv_path() -> Result<PathBuf, Error> {
-    env::current_exe().map_err(|_| Error::UmpvPathUnavailable)
+fn umpv_path() -> PathBuf {
+    env::current_exe().expect("running process should know its own executable path")
 }
 
-fn mpv_path() -> Result<PathBuf, Error> {
-    Ok(umpv_path()?.with_file_name("mpv.exe"))
+fn mpv_path() -> PathBuf {
+    umpv_path().with_file_name("mpv.exe")
 }
 
 fn register(loadfile_flags: LoadfileFlags) -> Result<(), Error> {
-    let shell_open_command = command_line::shell_open_command(&umpv_path()?, loadfile_flags);
+    let shell_open_command = command_line::shell_open_command(&umpv_path(), loadfile_flags);
     let extension_count = registry::register(&shell_open_command).map_err(Error::Registry)?;
     show_message(&format!(
         "Registered extensions: {extension_count}\nloadfile: {loadfile_flags}"
@@ -158,7 +156,7 @@ fn open(file: Option<&str>, loadfile_flags: LoadfileFlags) -> Result<(), Error> 
 
     let pipe = Pipe::for_current_session().map_err(Error::Pipe)?;
 
-    if let Some(mpv_pid) = open_in_mpv(&pipe, &mpv_path()?, &file, loadfile_flags)? {
+    if let Some(mpv_pid) = open_in_mpv(&pipe, &mpv_path(), &file, loadfile_flags)? {
         mpv::activate_window(mpv_pid);
     }
     Ok(())
